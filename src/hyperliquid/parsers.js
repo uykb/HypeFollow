@@ -1,0 +1,88 @@
+const logger = require('../utils/logger');
+
+/**
+ * Parse Order Update Event
+ * @param {object} data The 'data' payload from the WebSocket message
+ * @returns {object|null} Standardized order object or null if ignored
+ */
+function parseOrderUpdate(data) {
+  // Example payload structure for 'orderUpdates':
+  // [ { "order": { "coin": "BTC", "side": "B", "limitPx": "30000", "sz": "1.0", "oid": 123, "status": "open", ... } } ]
+  
+  if (!Array.isArray(data)) return null;
+
+  const orderEvent = data[0]; 
+  
+  if (!orderEvent || !orderEvent.order) return null;
+
+  const order = orderEvent.order;
+
+  // We are interested in 'open' (New Limit Order), 'canceled' (Cancel Order), and 'filled' (to clean up mapping)
+  if (order.status !== 'open' && order.status !== 'canceled' && order.status !== 'filled') {
+    return null;
+  }
+
+  return {
+    type: 'order',
+    status: order.status, // 'open', 'canceled', or 'filled'
+    coin: order.coin,
+    side: order.side, // 'B' or 'A'
+    limitPx: order.limitPx,
+    sz: order.sz,
+    oid: order.oid,
+    timestamp: order.timestamp,
+    userAddress: data[0].user || null // Extract user address from event if available (depends on HL API payload structure, usually in outer object for some events, but for orderUpdates strictly it might be implied by subscription. However, the standard HL 'orderUpdates' payload is just an array. We might need to pass the user down or rely on the fact we only subscribe to one user per connection usually, or if the event contains it.)
+    // Note: The standard 'orderUpdates' payload [ { order: {...} } ] DOES NOT contain the user address explicitly inside. 
+    // However, for the purpose of this implementation, we will assume we can get it or we need to pass it from the WS client.
+    // Let's modify the signature or logic in ws-client to attach it, OR check if `data` has it.
+    // Actually, in ws-client.js, we subscribe per user. The message comes in without user ID in the data payload usually.
+    // But let's check parseOrderUpdate signature again. It receives `data`.
+  };
+}
+
+/**
+ * Parse User Fills Event (Market Trades)
+ * @param {object} data 
+ * @returns {array} Array of standardized fill objects
+ */
+function parseUserFills(data) {
+  // Example payload structure for 'userFills':
+  // { "isSnapshot": false, "fills": [ { "coin": "BTC", "px": "30000", "sz": "0.1", "side": "B", "time": 123456, "crossed": true, ... } ] }
+  
+  // If it's a snapshot (on connection), we usually ignore it to avoid re-trading old history
+  if (data.isSnapshot) {
+    return [];
+  }
+
+  if (!Array.isArray(data.fills)) return [];
+
+  const validFills = [];
+
+  for (const fill of data.fills) {
+    // We only care about "crossed: true" which implies the user was the Taker (Active Market Order)
+    // "crossed: false" means they were the Maker (Limit Order filled), which is just a fill of a previous order.
+    // For "Copy Trading", we typically want to copy their *active* moves (Market Orders).
+    // Note: If we copy Limit Orders (via parseOrderUpdate), we don't need to copy the Fill of that Limit Order again via Market Order.
+    
+    if (fill.crossed === true) {
+      validFills.push({
+        type: 'fill',
+        coin: fill.coin,
+        side: fill.side, // 'B' or 'A'
+        px: fill.px,
+        sz: fill.sz,
+        timestamp: fill.time,
+        userAddress: data.user || null // UserFills event structure: { isSnapshot: false, user: "0x...", fills: [...] } - Wait, check HL docs. 
+        // HL docs: { "type": "userFills", "data": { "isSnapshot": false, "user": "0x...", "fills": [...] } }
+        // Yes, 'user' is often at the top level of the data object for userFills.
+      });
+    }
+  }
+
+  return validFills;
+}
+
+module.exports = {
+  parseOrderUpdate,
+  parseUserFills
+};

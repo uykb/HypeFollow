@@ -1,0 +1,8 @@
+node_modules/
+.env
+dist/
+dashboard/node_modules/
+dashboard/dist/
+.DS_Store
+*.log
+config/local.js

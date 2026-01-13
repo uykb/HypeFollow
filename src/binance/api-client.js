@@ -1,0 +1,135 @@
+const Binance = require('binance-api-node').default;
+const config = require('config');
+const logger = require('../utils/logger');
+
+class BinanceClient {
+  constructor() {
+    const binanceConfig = config.get('binance');
+    this.client = Binance({
+      apiKey: binanceConfig.apiKey,
+      apiSecret: binanceConfig.apiSecret,
+      httpBase: binanceConfig.useTestnet ? 'https://testnet.binancefuture.com' : undefined,
+    });
+    this.isTestnet = binanceConfig.useTestnet;
+  }
+
+  /**
+   * Convert Hyperliquid coin symbol to Binance Futures symbol
+   * @param {string} coin e.g., "BTC"
+   * @returns {string} e.g., "BTCUSDT"
+   */
+  getBinanceSymbol(coin) {
+    // MVP assumption: All pairs are USDT perpetuals
+    return `${coin}USDT`;
+  }
+
+  /**
+   * Create a limit order
+   * @param {string} coin 
+   * @param {string} side 'B' or 'A'
+   * @param {number|string} price 
+   * @param {number|string} quantity 
+   */
+  async createLimitOrder(coin, side, price, quantity) {
+    const symbol = this.getBinanceSymbol(coin);
+    const binanceSide = side === 'B' ? 'BUY' : 'SELL';
+    
+    logger.info(`Placing LIMIT order on Binance: ${symbol} ${binanceSide} ${quantity} @ ${price}`);
+
+    try {
+      const order = await this.client.futuresOrder({
+        symbol: symbol,
+        side: binanceSide,
+        type: 'LIMIT',
+        timeInForce: 'GTC', // Good Till Cancelled
+        quantity: quantity.toString(),
+        price: price.toString(),
+      });
+      
+      logger.info(`Binance LIMIT Order Placed: ${order.orderId}`);
+      return order;
+    } catch (error) {
+      logger.error('Binance Limit Order Failed', error, { symbol, side, price, quantity });
+      throw error;
+    }
+  }
+
+  /**
+   * Create a market order
+   * @param {string} coin 
+   * @param {string} side 'B' or 'A'
+   * @param {number|string} quantity 
+   */
+  async createMarketOrder(coin, side, quantity) {
+    const symbol = this.getBinanceSymbol(coin);
+    const binanceSide = side === 'B' ? 'BUY' : 'SELL';
+
+    logger.info(`Placing MARKET order on Binance: ${symbol} ${binanceSide} ${quantity}`);
+
+    try {
+      const order = await this.client.futuresOrder({
+        symbol: symbol,
+        side: binanceSide,
+        type: 'MARKET',
+        quantity: quantity.toString(),
+      });
+
+      logger.info(`Binance MARKET Order Placed: ${order.orderId}`);
+      return order;
+    } catch (error) {
+      logger.error('Binance Market Order Failed', error, { symbol, side, quantity });
+      throw error;
+    }
+  }
+
+  /**
+   * Cancel an order
+   * @param {string} symbol 
+   * @param {string|number} orderId 
+   */
+  async cancelOrder(symbol, orderId) {
+    logger.info(`Cancelling order on Binance: ${symbol} ID: ${orderId}`);
+    try {
+      const result = await this.client.futuresCancelOrder({
+        symbol: symbol,
+        orderId: orderId.toString()
+      });
+      logger.info(`Binance Order Cancelled: ${orderId}`);
+      return result;
+    } catch (error) {
+      // If error is "Unknown Order" (code -2011), it might already be filled or cancelled.
+      // We log it but don't necessarily crash the app.
+      logger.warn('Binance Cancel Order Failed', { error: error.message, symbol, orderId });
+      throw error;
+    }
+  }
+
+  /**
+   * Get Futures Account Info (V2)
+   * @returns {Promise<object>} Account information including balances
+   */
+  async futuresAccountInfo() {
+    try {
+      // Use V2 endpoint typically
+      return await this.client.futuresAccountInfo();
+    } catch (error) {
+      logger.error('Binance Account Info Failed', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get Futures Position Risk (V2)
+   * @returns {Promise<Array>} Position risk information
+   */
+  async futuresPositionRisk() {
+    try {
+      return await this.client.futuresPositionRisk();
+    } catch (error) {
+      logger.error('Binance Position Risk Failed', error);
+      throw error;
+    }
+  }
+}
+
+module.exports = new BinanceClient();
