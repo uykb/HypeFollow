@@ -73,6 +73,48 @@ HypeFollow is an automated copy-trading system that mirrors trading activities f
     };
     ```
 
+## 🐳 Docker Deployment
+
+The project is automatically built and published to **GitHub Container Registry (GHCR)**.
+
+### Run with Docker
+
+```bash
+docker run -d \
+  --name hypefollow \
+  -p 49618:49618 \
+  -e BINANCE_API_KEY=your_key \
+  -e BINANCE_API_SECRET=your_secret \
+  -e REDIS_HOST=your_redis_host \
+  ghcr.io/uykb/hypefollow:main
+```
+
+### Run with Docker Compose
+
+Create a `docker-compose.yml`:
+
+```yaml
+version: '3.8'
+services:
+  app:
+    image: ghcr.io/uykb/hypefollow:main
+    ports:
+      - "49618:49618"
+    environment:
+      - BINANCE_API_KEY=${BINANCE_API_KEY}
+      - BINANCE_API_SECRET=${BINANCE_API_SECRET}
+      - REDIS_HOST=redis
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+```
+
+---
+
 ## 🏃‍♂️ Usage
 
 **Development Mode** (with auto-restart):
