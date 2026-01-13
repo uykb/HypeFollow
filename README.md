@@ -1,83 +1,43 @@
 # HypeFollow - Hyperliquid to Binance Copy Trader
 
-HypeFollow is an automated copy-trading system that mirrors trading activities from "Smart Money" addresses on **Hyperliquid** (DEX) to your **Binance Futures** (CEX) account.
+HypeFollow 是一个自动化的跟单系统，能够将 **Hyperliquid** (DEX) 上的“聪明钱”地址交易活动实时同步到您的 **Binance Futures** (CEX) 账户。
 
-## 🚀 Key Features
+## 🚀 核心功能
 
-*   **Dual-Channel Monitoring**:
-    *   **Limit Orders**: Automatically mirrors limit order creation (`orderUpdates`) and cancellations.
-    *   **Market Fills**: Automatically mirrors active market taker trades (`userFills`).
-*   **Order Synchronization**:
-    *   **Open**: Creates corresponding LIMIT orders on Binance.
-    *   **Cancel**: Cancels corresponding orders on Binance when removed on Hyperliquid.
-    *   **Trade**: Executes MARKET orders on Binance when Smart Money aggressively enters/exits.
-*   **Risk Control**:
-    *   **Coin Whitelist**: Only allows trading for configured assets (e.g., BTC, ETH, SOL).
-    *   **Emergency Stop**: Global switch to pause all trading activities instantly.
-*   **Mapping System**: Maintains a bi-directional mapping between Hyperliquid OIDs and Binance Order IDs using Redis.
+*   **双通道监控**:
+    *   **限价单同步**: 实时跟踪 `orderUpdates`，同步创建和取消限价单。
+    *   **市价成交同步**: 实时跟踪 `userFills`，同步跟进主动吃单操作。
+*   **可视化监控面板**:
+    *   基于 **MUI (Material UI)** 的现代化仪表盘。
+    *   实时展示账户余额（HL & Binance）、当前持仓、订单映射状态。
+    *   实时系统日志流，方便排查问题。
+*   **精密仓位计算**:
+    *   **等比模式 (Equal)**: 根据双方账户净值比例自动计算下单数量。
+    *   **定比模式 (Fixed)**: 按固定比例跟随目标地址的下单数量。
+*   **风险控制**:
+    *   **币种白名单**: 仅交易配置的资产（如 BTC, ETH, SOL）。
+    *   **紧急停止**: 一键切断所有同步操作。
+*   **容器化支持**: 支持 Docker 部署，并集成 GitHub Actions 自动构建镜像至 GHCR。
 
-## 🛠 Tech Stack
+## 📊 监控面板
 
-*   **Runtime**: Node.js
-*   **Database**: Redis (for high-performance order mapping)
-*   **APIs**:
-    *   Hyperliquid WebSocket API
-    *   Binance Futures API (`binance-api-node`)
+系统默认在 **49618** 端口启动可视化面板。
+*   **访问地址**: `http://localhost:49618`
+*   **功能**: 实时查看同步状态、持仓 PnL、订单映射及系统日志。
 
-## 📋 Prerequisites
+## 🛠 技术栈
 
-1.  **Node.js** (v16 or higher)
-2.  **Redis** (Running locally or remotely)
-3.  **Binance Futures Account** (API Key & Secret)
-4.  **Hyperliquid Account Address** (The "Smart Money" address you want to follow)
+*   **Runtime**: Node.js (v20+)
+*   **Frontend**: React, MUI, Recharts
+*   **Backend**: Express, WebSocket
+*   **Database**: Redis (用于 OID 映射持久化)
+*   **APIs**: Hyperliquid WS/Info API, Binance Futures API
 
-## ⚙️ Installation
+## 🐳 快速部署
 
-1.  **Clone the repository**
-    ```bash
-    git clone https://github.com/your-username/HypeFollow.git
-    cd HypeFollow
-    ```
+### 使用 Docker (推荐)
 
-2.  **Install dependencies**
-    ```bash
-    npm install
-    ```
-
-3.  **Configure Environment Variables**
-    Copy the example env file and edit it:
-    ```bash
-    cp .env.example .env
-    ```
-    Edit `.env`:
-    ```env
-    BINANCE_API_KEY=your_binance_api_key
-    BINANCE_API_SECRET=your_binance_api_secret
-    BINANCE_TESTNET=true  # Set to false for real trading
-    REDIS_HOST=localhost
-    REDIS_PORT=6379
-    ```
-
-4.  **Configure Application Settings**
-    Edit `config/default.js` to set up the users you want to follow:
-    ```javascript
-    module.exports = {
-      // ...
-      hyperliquid: {
-        // ...
-        followedUsers: [
-          '0x1234567890abcdef1234567890abcdef12345678' // Replace with target UID
-        ]
-      },
-      // ...
-    };
-    ```
-
-## 🐳 Docker Deployment
-
-The project is automatically built and published to **GitHub Container Registry (GHCR)**.
-
-### Run with Docker
+项目镜像托管在 GitHub Container Registry。
 
 ```bash
 docker run -d \
@@ -89,9 +49,7 @@ docker run -d \
   ghcr.io/uykb/hypefollow:main
 ```
 
-### Run with Docker Compose
-
-Create a `docker-compose.yml`:
+### 使用 Docker Compose
 
 ```yaml
 version: '3.8'
@@ -109,46 +67,45 @@ services:
 
   redis:
     image: redis:alpine
-    ports:
-      - "6379:6379"
 ```
 
----
+## ⚙️ 本地配置
 
-## 🏃‍♂️ Usage
+1.  **安装依赖**:
+    ```bash
+    npm install
+    ```
 
-**Development Mode** (with auto-restart):
-```bash
-npm run dev
-```
+2.  **配置环境变量**:
+    复制 `.env.example` 为 `.env` 并填写 API 密钥及 Redis 配置。
 
-**Production Mode**:
-```bash
-npm start
-```
+3.  **修改交易策略**:
+    编辑 `config/default.js` 设置跟随地址和交易模式。
 
-## 📂 Project Structure
+4.  **启动程序**:
+    ```bash
+    npm start         # 生产模式
+    npm run dev       # 开发模式
+    npm run monitor   # 仅启动监控服务
+    ```
+
+## 📂 项目结构
 
 ```
 HypeFollow/
-├── config/
-│   └── default.js       # Core configuration (Users, Risk params, Redis config)
 ├── src/
-│   ├── binance/
-│   │   └── api-client.js # Binance API Wrapper
-│   ├── core/
-│   │   ├── order-mapper.js # Redis-based Order ID Mapper
-│   │   └── risk-control.js # Risk validation logic
-│   ├── hyperliquid/
-│   │   ├── ws-client.js  # WebSocket Client
-│   │   └── parsers.js    # Message Parsers
-│   ├── utils/
-│   │   ├── logger.js     # JSON Logger
-│   │   └── redis.js      # Redis Connection
-│   └── index.js          # Main Application Entry Point
-└── .env                  # Secrets (gitignored)
+│   ├── binance/         # 币安 API 封装
+│   ├── hyperliquid/     # HL 协议解析与 WS 客户端
+│   ├── core/            # 跟单核心逻辑、风险控制、仓位计算
+│   ├── monitoring/      # 监控后端 API 与数据收集
+│   └── utils/           # 日志与 Redis 抽象
+├── dashboard/           # 监控面板前端源码
+│   └── dist/            # 编译后的静态资源
+├── config/              # 策略与系统配置
+├── Dockerfile           # 镜像构建文件
+└── .github/workflows/   # CI/CD 自动化流程
 ```
 
-## ⚠️ Disclaimer
+## ⚠️ 免责声明
 
-**USE AT YOUR OWN RISK.** Cryptocurrency trading involves significant risk. This software is provided "AS IS", without warranty of any kind. The developers are not responsible for any financial losses incurred through the use of this bot. Always test on Testnet first.
+**交易有风险，跟单需谨慎。** 本工具仅供技术参考，开发者不对任何资金损失负责。建议先在 Testnet 进行充分测试。
