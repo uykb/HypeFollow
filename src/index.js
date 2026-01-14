@@ -4,13 +4,26 @@ const redis = require('./utils/redis');
 const hyperWs = require('./hyperliquid/ws-client');
 const binanceClient = require('./binance/api-client');
 const orderMapper = require('./core/order-mapper');
+const orderValidator = require('./core/order-validator');
 const riskControl = require('./core/risk-control');
 const positionCalculator = require('./core/position-calculator');
+const apiValidator = require('./utils/api-validator');
 const { startServer } = require('./monitoring/api-server');
 const dataCollector = require('./monitoring/data-collector');
 
 async function main() {
   logger.info('Starting HypeFollow System...');
+
+  // 1. API Security Validation
+  try {
+    apiValidator.validateAPIConfig();
+    apiValidator.checkIPWhitelist();
+    await apiValidator.validateAPIPermissions(binanceClient);
+    logger.info('🚀 API security validation passed');
+  } catch (error) {
+    logger.error('❌ API security validation failed - CANNOT START', { error: error.message });
+    process.exit(1);
+  }
 
   // Start Monitoring Server
   if (config.get('monitoring.enabled')) {
@@ -20,7 +33,10 @@ async function main() {
   // 1. Connect Hyperliquid WS
   hyperWs.connect();
 
-  // 2. Handle Order Events (Limit Orders: Open & Cancel)
+  // 2. Start Order Validator
+  orderValidator.start();
+
+  // 3. Handle Order Events (Limit Orders: Open & Cancel)
   hyperWs.on('order', async (orderData) => {
     dataCollector.stats.totalOrders++;
     logger.info(`Received Order Event: ${orderData.status} ${orderData.oid}`);
@@ -118,6 +134,7 @@ async function main() {
   // Handle graceful shutdown
   process.on('SIGINT', () => {
     logger.info('Shutting down...');
+    orderValidator.stop();
     hyperWs.close();
     redis.disconnect();
     process.exit(0);

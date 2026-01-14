@@ -7,6 +7,7 @@ const config = require('config');
 const path = require('path');
 const logger = require('../utils/logger');
 const dataCollector = require('./data-collector');
+const orderValidator = require('../core/order-validator');
 
 const PORT = process.env.MONITORING_PORT || 49618;
 
@@ -29,6 +30,15 @@ function startServer() {
 
   app.get('/api/logs', (req, res) => {
     res.json(dataCollector.recentLogs);
+  });
+
+  app.get('/api/orders/validate', async (req, res) => {
+    try {
+      const report = await orderValidator.getReport();
+      res.json(report);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
   });
 
   // Serve static files from dashboard build (if exists)
