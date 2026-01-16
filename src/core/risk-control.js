@@ -4,6 +4,7 @@ const logger = require('../utils/logger');
 class RiskControl {
   constructor() {
     this.supportedCoins = new Set(config.get('riskControl.supportedCoins'));
+    this.maxPositionSizes = config.get('riskControl.maxPositionSize');
     this.emergencyStop = config.get('app.emergencyStop');
   }
 
@@ -44,8 +45,30 @@ class RiskControl {
       throw new Error(`Coin ${orderDetails.coin} is not in whitelist`);
     }
 
-    // Add more risk checks here (e.g. max size)
+    return true;
+  }
+
+  /**
+   * Check if adding quantity would exceed max position size
+   * @param {string} coin 
+   * @param {number} currentPositionSize (Signed)
+   * @param {number} newQuantity (Positive)
+   * @returns {boolean} True if safe, False if exceeded
+   */
+  checkPositionLimit(coin, currentPositionSize, newQuantity) {
+    const maxLimit = this.maxPositionSizes[coin];
     
+    // If no limit defined, assume unlimited or safe
+    if (maxLimit === undefined) return true;
+
+    const currentAbs = Math.abs(currentPositionSize);
+    const projectedSize = currentAbs + newQuantity;
+
+    if (projectedSize > maxLimit) {
+      logger.warn(`Risk Control: Position limit exceeded for ${coin}. Current: ${currentAbs}, New: ${newQuantity}, Limit: ${maxLimit}`);
+      return false;
+    }
+
     return true;
   }
 }

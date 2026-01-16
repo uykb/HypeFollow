@@ -48,16 +48,37 @@ async function main() {
       if (orderData.status === 'open') {
         // --- Handle New Limit Order ---
         
+        // Determine action type (open vs close)
+        const currentPos = await binanceClient.getPosition(orderData.coin);
+        const isLong = currentPos > 0;
+        const isShort = currentPos < 0;
+        const isBuy = orderData.side === 'B';
+        
+        let actionType = 'open';
+        // If Long and Sell -> Close
+        if (isLong && !isBuy) actionType = 'close';
+        // If Short and Buy -> Close
+        if (isShort && isBuy) actionType = 'close';
+
         // Calculate Copy Quantity
         const quantity = await positionCalculator.calculateQuantity(
           orderData.coin,
           parseFloat(orderData.sz),
-          orderData.userAddress
+          orderData.userAddress,
+          actionType
         );
 
         if (!quantity) {
           logger.info(`Skipping order ${orderData.oid}: calculated quantity is null/zero`);
           return;
+        }
+
+        // Check Max Position Limit (Only for Open/Add)
+        if (actionType === 'open') {
+          if (!riskControl.checkPositionLimit(orderData.coin, currentPos, quantity)) {
+            logger.info(`Skipping order ${orderData.oid}: exceeds max position size`);
+            return;
+          }
         }
 
         const binanceOrder = await binanceClient.createLimitOrder(
@@ -107,16 +128,37 @@ async function main() {
     try {
       riskControl.validateOrder(fillData);
 
+      // Determine action type (open vs close)
+      const currentPos = await binanceClient.getPosition(fillData.coin);
+      const isLong = currentPos > 0;
+      const isShort = currentPos < 0;
+      const isBuy = fillData.side === 'B';
+      
+      let actionType = 'open';
+      // If Long and Sell -> Close
+      if (isLong && !isBuy) actionType = 'close';
+      // If Short and Buy -> Close
+      if (isShort && isBuy) actionType = 'close';
+
       // Calculate Copy Quantity
       const quantity = await positionCalculator.calculateQuantity(
         fillData.coin,
         parseFloat(fillData.sz),
-        fillData.userAddress
+        fillData.userAddress,
+        actionType
       );
 
       if (!quantity) {
         logger.info(`Skipping fill: calculated quantity is null/zero`);
         return;
+      }
+
+      // Check Max Position Limit (Only for Open/Add)
+      if (actionType === 'open') {
+        if (!riskControl.checkPositionLimit(fillData.coin, currentPos, quantity)) {
+          logger.info(`Skipping fill: exceeds max position size`);
+          return;
+        }
       }
 
       // Execute Market Order on Binance

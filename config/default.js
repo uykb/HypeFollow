@@ -30,7 +30,7 @@ module.exports = {
     supportedCoins: ['BTC', 'ETH', 'SOL'],
     // Max position size limits (not implemented in MVP but placeholder)
     maxPositionSize: {
-      BTC: 1.0,
+      BTC: 0.04,
       ETH: 10.0,
       SOL: 100.0
     }
@@ -53,9 +53,9 @@ module.exports = {
 
     // Min order sizes (static config - to be enhanced with API data if needed)
     minOrderSize: {
-      BTC: 0.001,
-      ETH: 0.01,
-      SOL: 0.1
+      BTC: { open: 0.002, close: 0.001 },
+      ETH: 0.007,
+      SOL: 0.04
     }
   },
   monitoring: {

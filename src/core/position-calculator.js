@@ -15,9 +15,10 @@ class PositionCalculator {
    * @param {string} coin 
    * @param {number} originalQuantity 
    * @param {string} hlAddress 
+   * @param {string} actionType 'open' or 'close'
    * @returns {Promise<number|null>} Calculated quantity or null if invalid/too small
    */
-  async calculateQuantity(coin, originalQuantity, hlAddress) {
+  async calculateQuantity(coin, originalQuantity, hlAddress, actionType = 'open') {
     let calculatedQuantity;
 
     try {
@@ -36,9 +37,19 @@ class PositionCalculator {
       }
 
       // Check min order size
-      const minSize = this.minOrderSizes[coin] || 0;
+      let minSize = 0;
+      const configSize = this.minOrderSizes[coin];
+      
+      if (typeof configSize === 'object') {
+        // Handle split config { open: x, close: y }
+        minSize = configSize[actionType] || 0;
+      } else {
+        // Handle legacy number config
+        minSize = configSize || 0;
+      }
+
       if (calculatedQuantity < minSize) {
-        logger.info(`Calculated quantity ${calculatedQuantity} for ${coin} below minimum ${minSize}, adjusting to minimum`);
+        logger.info(`Calculated quantity ${calculatedQuantity} for ${coin} (${actionType}) below minimum ${minSize}, adjusting to minimum`);
         calculatedQuantity = minSize;
       }
 
