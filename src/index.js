@@ -23,8 +23,12 @@ async function main() {
     apiValidator.checkIPWhitelist();
     await apiValidator.validateAPIPermissions(binanceClient);
     
-    // Ensure One-Way Mode
-    await binanceClient.ensureOneWayMode();
+    // Ensure One-Way Mode (Best effort - warn if fails but don't crash if user manually set it)
+    try {
+      await binanceClient.ensureOneWayMode();
+    } catch (modeError) {
+      logger.warn('Failed to automatically verify/set One-Way Mode. Please ensure your Binance Futures account is in "One-Way Mode" manually.', { error: modeError.message });
+    }
     
     logger.info('🚀 API security validation passed');
   } catch (error) {
