@@ -43,14 +43,6 @@ class HyperliquidWS extends EventEmitter {
 
     this.ws.on('message', (data) => {
       try {
-        // Log raw message for debugging (truncate if too long, e.g. large snapshots)
-        const dataStr = data.toString();
-        if (dataStr.length > 1000) {
-           logger.info(`[RAW WS] ${dataStr.substring(0, 1000)}... (truncated)`);
-        } else {
-           logger.info(`[RAW WS] ${dataStr}`);
-        }
-
         const message = JSON.parse(data);
         this.handleMessage(message);
       } catch (error) {

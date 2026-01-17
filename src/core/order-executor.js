@@ -66,61 +66,25 @@ class OrderExecutor {
       const signedTotalSize = await positionTracker.getTotalExecutionSize(coin, signedMasterOrderSize);
 
       // Check if we should execute
-      // We execute if:
-      // 1. The direction matches the Order Side (we don't reverse trade an Order usually, unless we are "Reducing" a position we don't have? No.)
-      //    Wait. If I have Pending Delta -0.2 (Overbought). SM Buys 0.1 (+0.1). Total = -0.1.
-      //    This means we are STILL Overbought by 0.1 even after SM buys.
-      //    Should we SELL 0.1? No. The instruction is "Wait for next add...".
-      //    We just DON'T Buy.
-      //    So if Total sign != Order sign, we Skip. (Or Total is 0).
+      // For Limit Orders, we trust the Master's Intent (Open Order) more than the Net Position Delta.
+      // Net Delta is crucial for Inventory Management (Market Fills), but preventing Limit Orders
+      // based on delta causes "Missing Orders" on the UI and failure to catch moves.
+      // So we use signedMasterOrderSize directly for direction check, but we still track execution against TotalSize for delta updates.
       
-      // 2. But what if Pending is +0.2 (Underbought). SM Sells 0.1 (-0.1). Total = +0.1.
-      //    SM is Selling. We need to Buy 0.1?
-      //    We should probably net it out.
-      //    "SmartMoney Sells 0.1". If we are "Underbought" (Pending Buy), it means we missed a previous Buy.
-      //    SM Sell 0.1 cancels out 0.1 of that missed Buy.
-      //    Total +0.1. We should Buy 0.1?
-      //    If SM is Selling, and we Buy, we are taking opposite side?
-      //    Ideally: We just reduce our "Missed Buy" count. We don't execute anything.
-      //    The logic "Total Signed" tells us the Net Change needed.
-      //    If Net Change is +0.1, we need to add 0.1 Long.
-      //    But triggering a Buy when SM is Selling might be confusing or risky (Price might be dropping).
-      //    However, strictly mathematically to match Position, we *should* Buy 0.1 (because we are net +0.1 behind).
-      //    BUT, user said "only when position catches up...".
-      //    Let's stick to: We only execute if Total Direction matches Order Direction.
-      //    i.e. We only "Piggyback" on the SM's action. We don't act contrary to it.
+      // Strict Direction Check (Disabled for Limit Orders to allow Drift-Preserving Copying)
+      // const isDirectionMatch = (side === 'B' && signedTotalSize > 0) || (side === 'A' && signedTotalSize < 0);
       
-      const isDirectionMatch = (side === 'B' && signedTotalSize > 0) || (side === 'A' && signedTotalSize < 0);
+      // New Logic: Always execute Limit Orders if size > 0.
+      // But we still track the "Net Effect" on the Delta.
       
       // Also apply a small epsilon for float comparison
       const absTotalSize = Math.abs(signedTotalSize);
-      if (absTotalSize < 0.0000001 || !isDirectionMatch) {
-        logger.info(`Skipping order ${oid}: Adjusted Total Size ${signedTotalSize} (Order: ${signedMasterOrderSize}) - Direction Mismatch or Zero`);
-        await consistencyEngine.markOrderProcessed(oid, { status: 'skipped_net_calculation' });
-        
-        // Even if skipped, we "Consumed" the Order Size from the pending delta?
-        // No. Pending Delta was "Target - Actual".
-        // SM Action changes Target.
-        // If we Skip, Actual doesn't change.
-        // So Delta changes naturally?
-        // Wait. Delta is stored in Redis. `getTotalExecutionSize` reads it.
-        // It DOES NOT update it.
-        // We only update Delta if we *deviate* from the plan.
-        // Here, the plan is "Execute Total". If we don't Execute Total, we have a Deviation.
-        // Deviation = Expected (Total) - Actual (0).
-        // New Pending Delta = Old Pending + (Order - Executed).
-        // Wait, simpler:
-        // PositionTracker tracks `Target - Actual`.
-        // SM Order: Target changes by +Order.
-        // We Execute: Actual changes by +Exec.
-        // New Delta = (OldTarget + Order) - (OldActual + Exec)
-        //           = (OldTarget - OldActual) + Order - Exec
-        //           = OldDelta + Order - Exec.
-        
-        // So, if we Skip (Exec=0), we must Add `Order` to Delta.
-        await positionTracker.addPendingDelta(coin, signedMasterOrderSize);
-        return;
-      }
+      // if (absTotalSize < 0.0000001 || !isDirectionMatch) {
+      //   logger.info(`Skipping order ${oid}: Adjusted Total Size ${signedTotalSize} (Order: ${signedMasterOrderSize}) - Direction Mismatch or Zero`);
+      //   await consistencyEngine.markOrderProcessed(oid, { status: 'skipped_net_calculation' });
+      //   await positionTracker.addPendingDelta(coin, signedMasterOrderSize);
+      //   return;
+      // }
 
       // 3. Get Current Position & Calculate Follower Quantity
       const currentPos = await binanceClient.getPosition(coin);
@@ -129,10 +93,19 @@ class OrderExecutor {
       const isClosing = (currentPos > 0 && side === 'A') || (currentPos < 0 && side === 'B');
       const actionType = isClosing ? 'close' : 'open';
 
-      // Use Absolute Total Size for calculation
+      // Use Master Order Size for Quantity Calculation (Ignore Delta for Order Size to purely Copy)
+      // But wait, if we ignore delta, we might never catch up?
+      // Actually, PositionCalculator applies ratio to `originalQuantity`.
+      // If we use `absTotalSize`, we are trying to clear delta.
+      // If we use `Math.abs(signedMasterOrderSize)`, we are just copying the new order.
+      // Given the user wants "Copy Limit Orders", let's use Master Size.
+      // We will handle Delta "catch up" via Enforced Quantity or separate logic, OR accept drift.
+      // But wait, if we use Master Size, `signedTotalSize` (Delta) remains partially untouched?
+      // No, later we consume delta based on what we executed.
+      
       const quantity = await positionCalculator.calculateQuantity(
         coin,
-        absTotalSize,
+        Math.abs(signedMasterOrderSize), // Changed from absTotalSize to just Master Order Size for Limit Orders
         userAddress,
         actionType
       );

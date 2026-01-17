@@ -49,7 +49,12 @@ class BinanceClient {
       logger.info(`Binance LIMIT Order Placed: ${order.orderId}`);
       return order;
     } catch (error) {
-      logger.error('Binance Limit Order Failed', error, { symbol, side, price, quantity });
+      logger.error('Binance Limit Order Failed', {
+        message: error.message,
+        code: error.code,
+        response: error.response?.data,
+        params: { symbol, side: binanceSide, price, quantity }
+      });
       throw error;
     }
   }
@@ -77,7 +82,12 @@ class BinanceClient {
       logger.info(`Binance MARKET Order Placed: ${order.orderId}`);
       return order;
     } catch (error) {
-      logger.error('Binance Market Order Failed', error, { symbol, side, quantity });
+      logger.error('Binance Market Order Failed', {
+        message: error.message,
+        code: error.code,
+        response: error.response?.data,
+        params: { symbol, side: binanceSide, quantity }
+      });
       throw error;
     }
   }

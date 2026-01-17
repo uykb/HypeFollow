@@ -49,8 +49,8 @@ class PositionCalculator {
       }
 
       if (calculatedQuantity < minSize) {
-        logger.info(`Calculated quantity ${calculatedQuantity} for ${coin} (${actionType}) below minimum ${minSize}, skipping order`);
-        return null;
+        logger.warn(`Calculated quantity ${calculatedQuantity} for ${coin} (${actionType}) below minimum ${minSize}, forcing minimum size`);
+        calculatedQuantity = minSize;
       }
 
       // Round to precision
