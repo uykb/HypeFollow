@@ -83,7 +83,8 @@ class BinanceClient {
       logger.info(`Binance LIMIT Order Placed: ${order.orderId}`);
       return order;
     } catch (error) {
-      logger.error('Binance Limit Order Failed', {
+      const errorMsg = `Binance Limit Order Failed: ${error.message} (Code: ${error.code})`;
+      logger.error(errorMsg, {
         message: error.message,
         code: error.code,
         response: error.response?.data,
@@ -116,7 +117,8 @@ class BinanceClient {
       logger.info(`Binance MARKET Order Placed: ${order.orderId}`);
       return order;
     } catch (error) {
-      logger.error('Binance Market Order Failed', {
+      const errorMsg = `Binance Market Order Failed: ${error.message} (Code: ${error.code})`;
+      logger.error(errorMsg, {
         message: error.message,
         code: error.code,
         response: error.response?.data,
