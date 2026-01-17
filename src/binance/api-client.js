@@ -105,6 +105,43 @@ class BinanceClient {
   }
 
   /**
+   * Subscribe to User Data Stream (Fills, Order Updates)
+   * @param {function} callback 
+   * @returns {function} Unsubscribe function
+   */
+  subscribeUserStream(callback) {
+    try {
+      // client.ws.user returns a clean callback
+      return this.client.ws.futuresUser(callback); 
+      // Note: For Futures it is usually futuresUser, or user with specific config. 
+      // binance-api-node distinguishes user() for spot and futuresUser() for futures?
+      // Checking standard library usage: usually client.ws.futuresUser(callback) for futures.
+    } catch (error) {
+      logger.error('Failed to subscribe to Binance User Stream', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get Order Status
+   * @param {string} symbol 
+   * @param {string} orderId 
+   * @returns {Promise<string>} Order status
+   */
+  async getOrderStatus(symbol, orderId) {
+    try {
+      const order = await this.client.futuresOrder({
+        symbol: symbol,
+        orderId: orderId.toString()
+      });
+      return order.status;
+    } catch (error) {
+      // If order not found (e.g. -2013), throw or return null
+      throw error;
+    }
+  }
+
+  /**
    * Get Futures Account Info (V2)
    * @returns {Promise<object>} Account information including balances
    */

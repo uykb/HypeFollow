@@ -48,6 +48,23 @@ class OrderMapper {
   }
 
   /**
+   * Get Hyperliquid OID from Binance OrderId
+   * @param {string} binanceOrderId 
+   * @returns {Promise<string|null>} Hyperliquid OID
+   */
+  async getHyperliquidOrder(binanceOrderId) {
+    try {
+      const data = await redis.get(`${BINANCE_TO_HYPER}${binanceOrderId}`);
+      if (!data) return null;
+      const parsed = JSON.parse(data);
+      return parsed.oid;
+    } catch (error) {
+      logger.error('Failed to get Hyperliquid order', error);
+      return null;
+    }
+  }
+
+  /**
    * Get Order timestamp
    * @param {string} hyperOid 
    */

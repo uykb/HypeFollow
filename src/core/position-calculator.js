@@ -73,6 +73,9 @@ class PositionCalculator {
 
   /**
    * Calculate quantity based on equity ratio
+   * @param {string} coin
+   * @param {number} originalQuantity 
+   * @param {string} hlAddress
    */
   async calculateEqualRatio(coin, originalQuantity, hlAddress) {
     if (!hlAddress) {
@@ -94,6 +97,37 @@ class PositionCalculator {
     logger.debug(`Equal Calc: HL_Eq=${hlEquity}, BN_Eq=${binanceEquity}, Ratio=${ratio}, Res=${calculatedQuantity}`);
 
     return calculatedQuantity;
+  }
+
+  /**
+   * Reverse calculation: Convert Follower Size -> Master Size
+   * Used for handling Orphan Fills (Binance side) to update Delta (Master side)
+   * @param {number} followerQuantity 
+   * @param {string} hlAddress 
+   * @returns {Promise<number>} Equivalent Master Size
+   */
+  async getReversedMasterSize(followerQuantity, hlAddress) {
+    let ratio = 1.0;
+
+    try {
+      if (this.mode === 'fixed') {
+        ratio = this.fixedRatio;
+      } else if (this.mode === 'equal') {
+        if (!hlAddress) return followerQuantity; // Fallback
+        
+        const hlEquity = await accountManager.getHyperliquidTotalEquity(hlAddress);
+        const binanceEquity = await accountManager.getBinanceTotalEquity();
+        
+        if (hlEquity > 0) {
+           ratio = (binanceEquity / hlEquity) * this.equalRatio;
+        }
+      }
+    } catch (err) {
+      logger.error('Error calculating reverse ratio', err);
+    }
+
+    if (ratio === 0) return 0;
+    return followerQuantity / ratio;
   }
 
   /**
