@@ -22,6 +22,10 @@ async function main() {
     apiValidator.validateAPIConfig();
     apiValidator.checkIPWhitelist();
     await apiValidator.validateAPIPermissions(binanceClient);
+    
+    // Ensure One-Way Mode
+    await binanceClient.ensureOneWayMode();
+    
     logger.info('🚀 API security validation passed');
   } catch (error) {
     logger.error('❌ API security validation failed - CANNOT START', { error: error.message });

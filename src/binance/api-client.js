@@ -14,6 +14,35 @@ class BinanceClient {
   }
 
   /**
+   * Ensure the account is in One-Way Mode (required for this bot)
+   */
+  async ensureOneWayMode() {
+    try {
+      // Check current mode
+      const result = await this.client.futuresPositionSideDual();
+      // Result format: { dualSidePosition: true/false }
+      
+      if (result.dualSidePosition) {
+        logger.info('Account is in Hedge Mode. Switching to One-Way Mode...');
+        await this.client.futuresChangePositionSideDual({ dualSidePosition: 'false' });
+        logger.info('Successfully switched to One-Way Mode.');
+      } else {
+        logger.info('Account is already in One-Way Mode.');
+      }
+    } catch (error) {
+      // If error is "No need to change", it's fine. 
+      // But typically checking first avoids that.
+      // Code -4059: "No need to change position side."
+      if (error.code === -4059) {
+        logger.info('Account mode check: Already correct.');
+        return;
+      }
+      logger.error('Failed to ensure One-Way Mode', { error: error.message, code: error.code });
+      throw error; // This is critical, we should probably throw
+    }
+  }
+
+  /**
    * Convert Hyperliquid coin symbol to Binance Futures symbol
    * @param {string} coin e.g., "BTC"
    * @returns {string} e.g., "BTCUSDT"
