@@ -1,10 +1,12 @@
-# Use Node.js LTS as the base image
 FROM node:20-slim
 
-# Set working directory
+# Install Redis
+RUN apt-get update && \
+    apt-get install -y redis-server && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
 
 # Install production dependencies
@@ -13,15 +15,21 @@ RUN npm ci --only=production
 # Copy application source
 COPY src/ ./src/
 COPY config/ ./config/
-# Copy the dashboard dist (it contains the single index.html we created)
 COPY dashboard/dist/ ./dashboard/dist/
 
-# Set environment variables defaults
+# Copy and setup entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Environment variables
 ENV NODE_ENV=production
 ENV MONITORING_PORT=49618
+# Force Redis to use localhost since it's now in the same container
+ENV REDIS_HOST=127.0.0.1
+ENV REDIS_PORT=6379
+ENV BINANCE_TESTNET=false
 
-# Expose the monitoring port
 EXPOSE 49618
 
-# Start the application
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "src/index.js"]

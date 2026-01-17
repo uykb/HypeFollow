@@ -90,7 +90,7 @@ services:
       - REDIS_HOST=redis
       - TRADING_MODE=equal
       - EQUAL_RATIO=1.0
-      - BINANCE_TESTNET=true
+      - BINANCE_TESTNET=false
     depends_on:
       - redis
     restart: unless-stopped
@@ -147,7 +147,7 @@ npm run monitor    # 仅启动监控服务
 # ========== Binance API 配置 ==========
 BINANCE_API_KEY=your_binance_api_key          # 币安 API Key (必需)
 BINANCE_API_SECRET=your_binance_api_secret    # 币安 API Secret (必需)
-BINANCE_TESTNET=true                          # true=测试网, false=生产网
+BINANCE_TESTNET=false                          # true=测试网, false=生产网
 
 # ========== Redis 配置 ==========
 REDIS_HOST=localhost                          # Redis 主机地址 (必需)
