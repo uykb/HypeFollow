@@ -4,6 +4,9 @@ const EventEmitter = require('events');
 const logger = require('../utils/logger');
 const parsers = require('./parsers');
 const axios = require('axios');
+const binanceClient = require('../binance/api-client');
+const orderMapper = require('../core/order-mapper');
+const consistencyEngine = require('../core/consistency-engine');
 
 class HyperliquidWS extends EventEmitter {
   constructor() {
@@ -134,6 +137,30 @@ class HyperliquidWS extends EventEmitter {
 
     logger.info('Starting initial sync of open orders...');
 
+    // 1. Fetch Binance Open Orders (Snapshot)
+    let binanceOpenOrders = [];
+    const binanceOrdersMap = new Map(); // Symbol -> Array of Orders
+    const binanceOrderIdMap = new Set(); // Set of OrderIDs for quick existence check
+
+    try {
+      binanceOpenOrders = await binanceClient.client.futuresOpenOrders();
+      
+      binanceOpenOrders.forEach(bo => {
+        // Index by Symbol for Recovery matching
+        if (!binanceOrdersMap.has(bo.symbol)) {
+          binanceOrdersMap.set(bo.symbol, []);
+        }
+        binanceOrdersMap.get(bo.symbol).push(bo);
+        
+        // Index by ID for Sync verification
+        binanceOrderIdMap.add(bo.orderId.toString());
+      });
+      
+      logger.info(`Fetched ${binanceOpenOrders.length} active Binance orders for sync reconciliation.`);
+    } catch (err) {
+      logger.warn('Failed to fetch Binance open orders. Sync/Pruning will be limited.', err);
+    }
+
     for (const user of this.followedUsers) {
       try {
         const response = await axios.post('https://api.hyperliquid.xyz/info', {
@@ -141,12 +168,17 @@ class HyperliquidWS extends EventEmitter {
           user: user
         });
 
-        const openOrders = response.data;
-        if (Array.isArray(openOrders) && openOrders.length > 0) {
-          logger.info(`Found ${openOrders.length} existing open orders for ${user}. Syncing...`);
+        const hlOpenOrders = response.data;
+        const hlOrderIds = new Set();
+
+        if (Array.isArray(hlOpenOrders)) {
+          logger.info(`Found ${hlOpenOrders.length} existing open orders for ${user}. Syncing...`);
           
-          for (const order of openOrders) {
-            // Standardize to match WS event format
+          // --- Phase 1: Sync HL -> Binance (Create / Verify) ---
+          for (const order of hlOpenOrders) {
+            hlOrderIds.add(order.oid.toString()); // Track for Pruning Phase
+
+            // Standardize
             const standardizedOrder = {
               type: 'order',
               status: 'open',
@@ -158,13 +190,92 @@ class HyperliquidWS extends EventEmitter {
               timestamp: order.timestamp,
               userAddress: user
             };
+
+            // A. Check Existing Mapping
+            const existingMapping = await orderMapper.getBinanceOrder(order.oid);
             
-            // Emit as if it came from WS
+            if (existingMapping) {
+              // We have a mapping. Check if the Binance Order is ACTUALLY active.
+              if (binanceOrderIdMap.has(existingMapping.orderId.toString())) {
+                // Perfect Sync: Mapped AND Active on Binance.
+                // DO NOT EMIT. This prevents duplicates definitively.
+                logger.debug(`[Sync] Order ${order.oid} already synced and active on Binance (${existingMapping.orderId}). Skipping.`);
+                continue;
+              } else {
+                // Mapping exists, but Binance Order is MISSING from OpenOrders.
+                // This means it was Filled or Canceled on Binance, but HL still has it Open.
+                // We should probably allow re-creation (Emit), or treat as Orphan drift.
+                // Given the user wants "Copy", if HL has it open, we should probably have it open.
+                // So we fall through to Emit.
+                logger.info(`[Sync] Order ${order.oid} mapped but not found in Binance OpenOrders. Retrying sync (creating new)...`);
+                // Clean old mapping to allow new creation logic to run cleanly if needed
+                await orderMapper.deleteMapping(order.oid); 
+              }
+            }
+
+            // B. Recovery Check (If no valid mapping)
+            const symbol = binanceClient.getBinanceSymbol(order.coin);
+            const candidates = binanceOrdersMap.get(symbol) || [];
+
+            if (candidates.length > 0) {
+              const hlPriceFormatted = binanceClient.roundPrice(order.coin, order.limitPx);
+              const binanceSide = order.side === 'B' ? 'BUY' : 'SELL';
+
+              const matchIndex = candidates.findIndex(bo => 
+                bo.side === binanceSide && 
+                parseFloat(bo.price) === parseFloat(hlPriceFormatted)
+              );
+
+              if (matchIndex !== -1) {
+                const matchedOrder = candidates[matchIndex];
+                candidates.splice(matchIndex, 1); // Consume candidate
+
+                logger.info(`[Sync] Recovered mapping: HL ${order.oid} <-> Binance ${matchedOrder.orderId}`);
+
+                await orderMapper.saveMapping(order.oid, matchedOrder.orderId, symbol);
+                await consistencyEngine.markOrderProcessed(order.oid, {
+                  type: 'limit-recovered',
+                  coin: order.coin,
+                  restored: true,
+                  binanceOrderId: matchedOrder.orderId,
+                  recoveredAt: Date.now()
+                });
+
+                // Remove from map to prevent Pruning later (though Pruning checks Redis, so it's fine)
+                continue; // Skip Emit
+              }
+            }
+            
+            // C. Create New
             this.emit('order', standardizedOrder);
-            
-            // Small delay to prevent overwhelming the executor/rate limits
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise(resolve => setTimeout(resolve, 50));
           }
+
+          // --- Phase 2: Prune Binance -> HL (Cancel Zombie Orders) ---
+          // Iterate all Binance Open Orders. If they map to an HL Order that is NOT in hlOrderIds, Cancel them.
+          
+          for (const bOrder of binanceOpenOrders) {
+            // Check if this Binance Order is a "Follow" order (has mapping)
+            const mappedHlOid = await orderMapper.getHyperliquidOrder(bOrder.orderId);
+            
+            if (mappedHlOid) {
+              // It is a Follow order.
+              // Check if the Master Order still exists
+              if (!hlOrderIds.has(mappedHlOid.toString())) {
+                logger.info(`[Sync] Pruning Zombie Binance Order ${bOrder.orderId} (HL ${mappedHlOid} no longer open).`);
+                
+                try {
+                  await binanceClient.cancelOrder(bOrder.symbol, bOrder.orderId);
+                  await orderMapper.deleteMapping(mappedHlOid);
+                } catch (err) {
+                  logger.warn(`[Sync] Failed to prune order ${bOrder.orderId}`, err);
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 50));
+              }
+            }
+          }
+
         } else {
           logger.info(`No existing open orders found for ${user}.`);
         }
