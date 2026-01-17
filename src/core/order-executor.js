@@ -1,4 +1,5 @@
 const logger = require('../utils/logger');
+const config = require('config');
 const binanceClient = require('../binance/api-client');
 const orderMapper = require('./order-mapper');
 const positionTracker = require('./position-tracker');
@@ -8,6 +9,41 @@ const positionCalculator = require('./position-calculator');
 
 class OrderExecutor {
   
+  /**
+   * Calculate enforced minimum quantity if pending delta exists
+   * @param {string} coin 
+   * @param {number|null} calculatedQuantity 
+   * @param {string} actionType 'open' or 'close'
+   */
+  async getEnforcedQuantity(coin, calculatedQuantity, actionType) {
+    // Only check if calculated quantity is too small (skipped)
+    if (calculatedQuantity && calculatedQuantity > 0) return null;
+
+    const pendingDelta = await positionTracker.getPendingDelta(coin);
+    
+    // Only enforce if we are "Lagging" (Delta > 0 for Buy, Delta < 0 for Sell?)
+    // Actually, `pendingDelta` is signed. Positive = Need to Buy. Negative = Need to Sell.
+    // We should only enforce if the direction matches the pending delta.
+    // But caller context handles direction match check usually.
+    // Here we just check if there is ANY significant delta to clear.
+    
+    if (Math.abs(pendingDelta) > 0) {
+      const configSize = config.get('trading.minOrderSize')[coin];
+      let minSize = 0;
+      
+      if (typeof configSize === 'object') {
+        minSize = configSize[actionType] || 0;
+      } else {
+        minSize = configSize || 0;
+      }
+
+      logger.info(`Enforcing min size ${minSize} for ${coin} due to pending delta ${pendingDelta}`);
+      return minSize;
+    }
+    
+    return null;
+  }
+
   /**
    * Execute Limit Order
    * @param {object} orderData 
@@ -86,23 +122,64 @@ class OrderExecutor {
         return;
       }
 
-      // 3. Calculate Follower Quantity
+      // 3. Get Current Position & Calculate Follower Quantity
+      const currentPos = await binanceClient.getPosition(coin);
+      
+      // Determine Action Type
+      const isClosing = (currentPos > 0 && side === 'A') || (currentPos < 0 && side === 'B');
+      const actionType = isClosing ? 'close' : 'open';
+
       // Use Absolute Total Size for calculation
       const quantity = await positionCalculator.calculateQuantity(
         coin,
         absTotalSize,
         userAddress,
-        'open' // Assuming 'open' logic for simplicity as before
+        actionType
       );
 
+      // Check if we skipped due to min size
       if (!quantity || quantity <= 0) {
-        // We skipping execution, but we still need to update Delta (Target moved)
+        
+        // Try Enforced Execution (Scheme: Force Min Size if Lagging)
+        const enforcedQuantity = await this.getEnforcedQuantity(coin, quantity, actionType);
+        
+        if (enforcedQuantity && enforcedQuantity > 0) {
+          // Check Risk for Enforced Quantity
+          if (riskControl.checkPositionLimit(coin, currentPos, enforcedQuantity)) {
+            logger.info(`Force executing min size ${enforcedQuantity} for ${coin} to clear delta`);
+            
+            const binanceOrder = await binanceClient.createLimitOrder(
+              coin, side, limitPx, enforcedQuantity
+            );
+            
+            if (binanceOrder && binanceOrder.orderId) {
+               const symbol = binanceClient.getBinanceSymbol(coin);
+               await orderMapper.saveMapping(oid, binanceOrder.orderId, symbol);
+               
+               await consistencyEngine.markOrderProcessed(oid, {
+                type: 'limit-enforced',
+                coin, side,
+                masterSize: masterOrderSize,
+                totalMasterSize: absTotalSize,
+                followerSize: enforcedQuantity,
+                price: limitPx,
+                binanceOrderId: binanceOrder.orderId
+              });
+
+              // Update Delta: We consumed the Pending Delta (Total Size - Order Size)
+              const deltaCleared = signedTotalSize - signedMasterOrderSize;
+              await positionTracker.consumePendingDelta(coin, deltaCleared);
+              return;
+            }
+          }
+        }
+
+        // Skipped and not enforced. Accumulate delta for next execution (Scheme C+)
         await positionTracker.addPendingDelta(coin, signedMasterOrderSize);
         return;
       }
 
       // 4. Check Risk
-      const currentPos = await binanceClient.getPosition(coin);
       if (!riskControl.checkPositionLimit(coin, currentPos, quantity)) {
         // Blocked by Risk. Target moved, we didn't. Add to Delta.
         await positionTracker.addPendingDelta(coin, signedMasterOrderSize);
@@ -219,19 +296,49 @@ class OrderExecutor {
         return;
       }
 
+      const currentPos = await binanceClient.getPosition(coin);
+      
+      const isClosing = (currentPos > 0 && side === 'A') || (currentPos < 0 && side === 'B');
+      const actionType = isClosing ? 'close' : 'open';
+
       const quantity = await positionCalculator.calculateQuantity(
         coin,
         absTotalSize,
         userAddress,
-        'open'
+        actionType
       );
 
       if (!quantity || quantity <= 0) {
+        
+        // Try Enforced Execution (Scheme: Force Min Size if Lagging)
+        const enforcedQuantity = await this.getEnforcedQuantity(coin, quantity, actionType);
+        
+        if (enforcedQuantity && enforcedQuantity > 0) {
+          if (riskControl.checkPositionLimit(coin, currentPos, enforcedQuantity)) {
+            logger.info(`Force executing min size ${enforcedQuantity} for ${coin} to clear delta (Market)`);
+            
+            const binanceOrder = await binanceClient.createMarketOrder(coin, side, enforcedQuantity);
+            
+             await consistencyEngine.markOrderProcessed(fillId, {
+              type: 'market-enforced',
+              coin, side,
+              masterSize: masterOrderSize,
+              totalMasterSize: absTotalSize,
+              followerSize: enforcedQuantity,
+              price: px, 
+              binanceOrderId: binanceOrder.orderId
+            });
+
+            const deltaCleared = signedTotalSize - signedMasterOrderSize;
+            await positionTracker.consumePendingDelta(coin, deltaCleared);
+            return;
+          }
+        }
+
         await positionTracker.addPendingDelta(coin, signedMasterOrderSize);
         return;
       }
 
-      const currentPos = await binanceClient.getPosition(coin);
       if (!riskControl.checkPositionLimit(coin, currentPos, quantity)) {
         await positionTracker.addPendingDelta(coin, signedMasterOrderSize);
         return;
