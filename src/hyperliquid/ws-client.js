@@ -3,6 +3,7 @@ const config = require('config');
 const EventEmitter = require('events');
 const logger = require('../utils/logger');
 const parsers = require('./parsers');
+const axios = require('axios');
 
 class HyperliquidWS extends EventEmitter {
   constructor() {
@@ -34,10 +35,22 @@ class HyperliquidWS extends EventEmitter {
       this.isExplicitClose = false;
       this.subscribe();
       this.startHeartbeat();
+      
+      // Perform Initial Sync of Open Orders
+      this.syncInitialOrders();
     });
+
 
     this.ws.on('message', (data) => {
       try {
+        // Log raw message for debugging (truncate if too long, e.g. large snapshots)
+        const dataStr = data.toString();
+        if (dataStr.length > 1000) {
+           logger.info(`[RAW WS] ${dataStr.substring(0, 1000)}... (truncated)`);
+        } else {
+           logger.info(`[RAW WS] ${dataStr}`);
+        }
+
         const message = JSON.parse(data);
         this.handleMessage(message);
       } catch (error) {
@@ -122,6 +135,51 @@ class HyperliquidWS extends EventEmitter {
       this.ws.send(JSON.stringify(fillMsg));
       logger.info(`Subscribed to userFills for user: ${user}`);
     });
+  }
+
+  async syncInitialOrders() {
+    if (this.followedUsers.length === 0) return;
+
+    logger.info('Starting initial sync of open orders...');
+
+    for (const user of this.followedUsers) {
+      try {
+        const response = await axios.post('https://api.hyperliquid.xyz/info', {
+          type: "openOrders",
+          user: user
+        });
+
+        const openOrders = response.data;
+        if (Array.isArray(openOrders) && openOrders.length > 0) {
+          logger.info(`Found ${openOrders.length} existing open orders for ${user}. Syncing...`);
+          
+          for (const order of openOrders) {
+            // Standardize to match WS event format
+            const standardizedOrder = {
+              type: 'order',
+              status: 'open',
+              coin: order.coin,
+              side: order.side,
+              limitPx: order.limitPx,
+              sz: order.sz,
+              oid: order.oid,
+              timestamp: order.timestamp,
+              userAddress: user
+            };
+            
+            // Emit as if it came from WS
+            this.emit('order', standardizedOrder);
+            
+            // Small delay to prevent overwhelming the executor/rate limits
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        } else {
+          logger.info(`No existing open orders found for ${user}.`);
+        }
+      } catch (error) {
+        logger.error(`Failed to fetch initial orders for ${user}`, error);
+      }
+    }
   }
 
   handleMessage(message) {
