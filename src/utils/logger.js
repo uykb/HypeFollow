@@ -14,16 +14,29 @@ const logger = {
     notifyCollector('info', message, meta);
   },
   error: (message, error = null, meta = {}) => {
+    // Flatten nested objects in meta to ensure visibility in JSON logs
+    // If 'error' object itself has properties like code/response, we merge them
+    let errorDetails = {};
+    if (typeof error === 'object' && error !== null) {
+        errorDetails = {
+            errorMessage: error.message,
+            stack: error.stack,
+            code: error.code,
+            response: error.response?.data ? JSON.stringify(error.response.data) : undefined
+        };
+    } else {
+        errorDetails = { errorMessage: String(error) };
+    }
+
     const entry = {
       level: 'ERROR',
       timestamp: getTimestamp(),
       message,
-      error: error?.message || error,
-      stack: error?.stack,
+      ...errorDetails,
       ...meta
     };
     console.error(JSON.stringify(entry));
-    notifyCollector('error', message, { ...meta, error: error?.message });
+    notifyCollector('error', message, { ...meta, error: errorDetails.errorMessage });
   },
   warn: (message, meta = {}) => {
     const entry = {

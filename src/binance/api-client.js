@@ -24,6 +24,37 @@ class BinanceClient {
   }
 
   /**
+   * Round price to tick size
+   * @param {string} coin 
+   * @param {number|string} price 
+   */
+  roundPrice(coin, price) {
+    // Basic tick size implementation
+    // Ideally this should come from exchangeInfo
+    const tickSizes = {
+      BTC: 1, // 0.1 for BTCUSDT usually? No, it's 0.1. Let's verify. 
+              // Actually for BTCUSDT on Futures, tick size is usually 0.1
+              // BUT, HL prices might be 94352.0.
+              // Let's use 1 decimal place for BTC/ETH to be safe, or 2.
+              // BTC: 0.1, ETH: 0.01, SOL: 0.01
+      BTC: 0.1,
+      ETH: 0.01,
+      SOL: 0.01,
+      DEFAULT: 0.0001
+    };
+    
+    const tickSize = tickSizes[coin] || tickSizes.DEFAULT;
+    // Round to nearest tick
+    const p = parseFloat(price);
+    const rounded = Math.round(p / tickSize) * tickSize;
+    
+    // Convert to fixed string to avoid 94352.00000001
+    // Count decimals in tickSize
+    const decimals = (tickSize.toString().split('.')[1] || '').length;
+    return rounded.toFixed(decimals);
+  }
+
+  /**
    * Create a limit order
    * @param {string} coin 
    * @param {string} side 'B' or 'A'
@@ -34,7 +65,10 @@ class BinanceClient {
     const symbol = this.getBinanceSymbol(coin);
     const binanceSide = side === 'B' ? 'BUY' : 'SELL';
     
-    logger.info(`Placing LIMIT order on Binance: ${symbol} ${binanceSide} ${quantity} @ ${price}`);
+    // Ensure Price Precision
+    const formattedPrice = this.roundPrice(coin, price);
+    
+    logger.info(`Placing LIMIT order on Binance: ${symbol} ${binanceSide} ${quantity} @ ${formattedPrice} (Orig: ${price})`);
 
     try {
       const order = await this.client.futuresOrder({
@@ -43,7 +77,7 @@ class BinanceClient {
         type: 'LIMIT',
         timeInForce: 'GTC', // Good Till Cancelled
         quantity: quantity.toString(),
-        price: price.toString(),
+        price: formattedPrice,
       });
       
       logger.info(`Binance LIMIT Order Placed: ${order.orderId}`);
