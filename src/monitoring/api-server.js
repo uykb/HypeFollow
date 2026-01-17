@@ -46,7 +46,7 @@ function startServer() {
   app.use(express.static(dashboardPath));
 
   // Catch-all for React Router
-  app.get('*', (req, res) => {
+  app.get(/(.*)/, (req, res) => {
     if (req.path.startsWith('/api')) {
       return res.status(404).json({ error: 'Not Found' });
     }
