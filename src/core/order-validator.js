@@ -36,7 +36,7 @@ class OrderValidator {
         if (!mapping) continue;
 
         try {
-          await binanceClient.client.futuresOrder({
+          await binanceClient.client.futuresGetOrder({
             symbol: mapping.symbol,
             orderId: mapping.orderId.toString()
           });
@@ -86,7 +86,7 @@ class OrderValidator {
 
     try {
       // Query Binance for real-time status
-      const binanceOrder = await binanceClient.client.futuresOrder({
+      const binanceOrder = await binanceClient.client.futuresGetOrder({
         symbol: mapping.symbol,
         orderId: mapping.orderId.toString()
       });

@@ -205,7 +205,7 @@ class BinanceClient {
    */
   async getOrderStatus(symbol, orderId) {
     try {
-      const order = await this.client.futuresOrder({
+      const order = await this.client.futuresGetOrder({
         symbol: symbol,
         orderId: orderId.toString()
       });
