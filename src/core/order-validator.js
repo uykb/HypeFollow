@@ -12,6 +12,7 @@ class OrderValidator {
 
   start() {
     if (this.timer) return;
+    this.cleanupStaleMappings().catch(err => logger.error('Startup cleanup failed', err));
     this.timer = setInterval(() => this.validateAll(), this.checkInterval);
     logger.info('Order status validator started');
   }
@@ -20,6 +21,38 @@ class OrderValidator {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
+    }
+  }
+
+  async cleanupStaleMappings() {
+    logger.info('Running startup cleanup for stale order mappings...');
+    try {
+      const keys = await redis.keys('map:h2b:*');
+      let cleaned = 0;
+      
+      for (const key of keys) {
+        const hyperOid = key.replace('map:h2b:', '');
+        const mapping = await orderMapper.getBinanceOrder(hyperOid);
+        if (!mapping) continue;
+
+        try {
+          await binanceClient.client.futuresOrder({
+            symbol: mapping.symbol,
+            orderId: mapping.orderId.toString()
+          });
+        } catch (error) {
+          // -2011: Unknown order
+          if (error.code === -2011) {
+            await orderMapper.deleteMapping(hyperOid);
+            cleaned++;
+          }
+        }
+      }
+      if (cleaned > 0) {
+        logger.info(`Startup cleanup removed ${cleaned} stale mappings`);
+      }
+    } catch (error) {
+      logger.error('Error during startup cleanup', error);
     }
   }
 
@@ -63,6 +96,8 @@ class OrderValidator {
       if (finalStatuses.includes(binanceOrder.status)) {
         logger.info(`Cleaning up finished order: ${mapping.symbol} ${mapping.orderId} (Status: ${binanceOrder.status})`);
         await orderMapper.deleteMapping(hyperOid);
+      } else {
+        await redis.del(`validate:fail:${hyperOid}`);
       }
       
       // Additional check: Timeout for stuck open orders (e.g., 24h)
@@ -74,11 +109,21 @@ class OrderValidator {
       }
 
     } catch (error) {
+      const failKey = `validate:fail:${hyperOid}`;
+      const fails = await redis.incr(failKey);
+      await redis.expire(failKey, 3600);
+
       if (error.code === -2011) { // Unknown order
         logger.warn(`Binance order ${mapping.orderId} not found for HL OID ${hyperOid}. Cleaning up mapping.`);
         await orderMapper.deleteMapping(hyperOid);
+        await redis.del(failKey);
       } else {
-        logger.error(`Failed to validate order ${hyperOid}`, error);
+        logger.error(`Failed to validate order ${hyperOid} (Attempt ${fails}/3)`, error);
+        if (fails >= 3) {
+          logger.warn(`Order ${hyperOid} failed validation 3 times. Force removing mapping.`);
+          await orderMapper.deleteMapping(hyperOid);
+          await redis.del(failKey);
+        }
       }
     }
   }
