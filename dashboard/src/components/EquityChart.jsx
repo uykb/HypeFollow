@@ -6,7 +6,7 @@ const EquityChart = ({ data }) => {
   if (!data || data.length === 0) {
     return (
       <Paper sx={{ p: 2, height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Typography color="text.secondary">Waiting for equity data...</Typography>
+        <Typography color="text.secondary">等待权益数据...</Typography>
       </Paper>
     );
   }
@@ -19,7 +19,7 @@ const EquityChart = ({ data }) => {
 
   return (
     <Paper sx={{ p: 2, height: 350 }}>
-      <Typography variant="h6" gutterBottom>Equity History (24h)</Typography>
+      <Typography variant="h6" gutterBottom>24小时权益走势</Typography>
       <ResponsiveContainer width="100%" height="90%">
         <LineChart data={formattedData}>
           <CartesianGrid strokeDasharray="3 3" stroke="#30363d" />
@@ -38,7 +38,7 @@ const EquityChart = ({ data }) => {
           <Legend />
           
           <Line yAxisId="left" type="monotone" dataKey="hlEquity" name="Hyperliquid ($)" stroke="#58a6ff" dot={false} strokeWidth={2} />
-          <Line yAxisId="right" type="monotone" dataKey="bnEquity" name="Binance ($)" stroke="#3fb950" dot={false} strokeWidth={2} />
+          <Line yAxisId="right" type="monotone" dataKey="bnEquity" name="币安 ($)" stroke="#3fb950" dot={false} strokeWidth={2} />
         </LineChart>
       </ResponsiveContainer>
     </Paper>

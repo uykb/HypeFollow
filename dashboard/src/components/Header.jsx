@@ -18,7 +18,7 @@ const Header = ({ connected, lastUpdate, emergencyStop, onEmergencyToggle }) => 
           HypeFollow
           <Chip 
             icon={<StatusIcon sx={{ fontSize: '10px !important' }} />} 
-            label={connected ? "LIVE" : "OFFLINE"} 
+            label={connected ? "在线" : "离线"} 
             color={connected ? "success" : "error"} 
             size="small" 
             variant="outlined"
@@ -28,7 +28,7 @@ const Header = ({ connected, lastUpdate, emergencyStop, onEmergencyToggle }) => 
 
         {!isMobile && (
            <Typography variant="caption" sx={{ mr: 2, color: 'text.secondary' }}>
-            Updated: {lastUpdate ? lastUpdate.toLocaleTimeString() : '--:--:--'}
+            最后更新: {lastUpdate ? lastUpdate.toLocaleTimeString() : '--:--:--'}
           </Typography>
         )}
 
@@ -40,7 +40,7 @@ const Header = ({ connected, lastUpdate, emergencyStop, onEmergencyToggle }) => 
           sx={{ fontWeight: 'bold' }}
           disabled // For now, read-only as per request logic usually, but user asked for deep customization. Assuming the logic for toggling isn't passed yet, I'll keep it static or accept a prop.
         >
-          {emergencyStop ? "STOPPED" : "ACTIVE"}
+          {emergencyStop ? "已停止" : "运行中"}
         </Button>
       </Toolbar>
     </AppBar>

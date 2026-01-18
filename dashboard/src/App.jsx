@@ -23,7 +23,7 @@ function App() {
         <CssBaseline />
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', bgcolor: 'background.default' }}>
           <CircularProgress size={60} thickness={4} />
-          <Typography variant="h6" sx={{ mt: 3, color: 'text.secondary' }}>Initializing HypeFollow...</Typography>
+          <Typography variant="h6" sx={{ mt: 3, color: 'text.secondary' }}>HypeFollow 系统初始化中...</Typography>
         </Box>
       </ThemeProvider>
     );
@@ -45,18 +45,18 @@ function App() {
           {/* Top Stats Row */}
           <Grid container spacing={2} sx={{ mb: 3 }}>
             <Grid item xs={6} sm={6} md={3}>
-              <StatCard title="Total Orders" value={stats.totalOrders} icon={<TrendingUp />} color="primary" />
+              <StatCard title="总订单数" value={stats.totalOrders} icon={<TrendingUp />} color="primary" />
             </Grid>
             <Grid item xs={6} sm={6} md={3}>
-              <StatCard title="Total Fills" value={stats.totalFills} icon={<Speed />} color="info" />
+              <StatCard title="总成交数" value={stats.totalFills} icon={<Speed />} color="info" />
             </Grid>
             <Grid item xs={6} sm={6} md={3}>
-              <StatCard title="Binance Equity" value={`$${accounts.binance.equity.toFixed(2)}`} icon={<AccountBalance />} color="warning" />
+              <StatCard title="币安权益" value={`$${accounts.binance.equity.toFixed(2)}`} icon={<AccountBalance />} color="warning" />
             </Grid>
             <Grid item xs={6} sm={6} md={3}>
               <StatCard 
-                title="System Uptime" 
-                value={`${Math.floor(stats.uptime / 3600)}h ${Math.floor((stats.uptime % 3600) / 60)}m`} 
+                title="系统运行时间" 
+                value={`${Math.floor(stats.uptime / 3600)}小时 ${Math.floor((stats.uptime % 3600) / 60)}分`} 
                 icon={<CheckCircle />} 
                 color="secondary" 
               />

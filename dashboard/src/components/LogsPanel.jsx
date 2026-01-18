@@ -5,8 +5,8 @@ const LogsPanel = ({ logs }) => {
   return (
     <Paper sx={{ display: 'flex', flexDirection: 'column', height: 500 }}>
       <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h6">System Logs</Typography>
-        <Typography variant="caption" color="text.secondary">{logs.length} entries</Typography>
+        <Typography variant="h6">系统日志</Typography>
+        <Typography variant="caption" color="text.secondary">{logs.length} 条记录</Typography>
       </Box>
       <Box sx={{ flexGrow: 1, overflow: 'auto', p: 1, bgcolor: '#0d1117' }}>
         <List dense disablePadding>

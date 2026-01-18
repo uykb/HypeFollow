@@ -5,22 +5,22 @@ const OrderMappings = ({ mappings }) => {
   return (
     <Paper sx={{ display: 'flex', flexDirection: 'column', height: '100%', maxHeight: 400 }}>
       <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Typography variant="h6">Active Order Mappings</Typography>
+        <Typography variant="h6">活跃订单映射</Typography>
       </Box>
       <TableContainer sx={{ flexGrow: 1 }}>
         <Table size="small" stickyHeader>
           <TableHead>
             <TableRow>
-              <TableCell>Symbol</TableCell>
-              <TableCell>HL OID</TableCell>
-              <TableCell>Binance ID</TableCell>
+              <TableCell>币种</TableCell>
+              <TableCell>HL 订单ID</TableCell>
+              <TableCell>币安订单ID</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {mappings.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={3} align="center" sx={{ py: 3, color: 'text.secondary' }}>
-                  No active mappings
+                  无活跃映射
                 </TableCell>
               </TableRow>
             ) : (

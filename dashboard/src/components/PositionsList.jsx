@@ -25,19 +25,19 @@ const PositionCard = ({ position }) => {
         <Divider sx={{ my: 1 }} />
           <Grid container spacing={1}>
             <Grid item xs={6}>
-              <Typography variant="caption" color="text.secondary">Amount</Typography>
+              <Typography variant="caption" color="text.secondary">数量</Typography>
               <Typography variant="body2">{parseFloat(position.amount).toFixed(3)}</Typography>
             </Grid>
             <Grid item xs={6}>
-              <Typography variant="caption" color="text.secondary">Entry</Typography>
+              <Typography variant="caption" color="text.secondary">开仓价</Typography>
               <Typography variant="body2">{parseFloat(position.entryPrice).toFixed(2)}</Typography>
             </Grid>
             <Grid item xs={6}>
-              <Typography variant="caption" color="text.secondary">Mark</Typography>
+              <Typography variant="caption" color="text.secondary">标记价</Typography>
               <Typography variant="body2">{parseFloat(position.markPrice).toFixed(2)}</Typography>
             </Grid>
             <Grid item xs={6}>
-              <Typography variant="caption" color="text.secondary">Liq Price</Typography>
+              <Typography variant="caption" color="text.secondary">爆仓价</Typography>
               <Typography variant="body2" sx={{ color: 'warning.main' }}>
                 {parseFloat(position.liquidationPrice) > 0 ? parseFloat(position.liquidationPrice).toFixed(2) : '--'}
               </Typography>
@@ -55,7 +55,7 @@ const PositionCard = ({ position }) => {
     if (!positions || positions.length === 0) {
       return (
         <Paper sx={{ p: 3, textAlign: 'center' }}>
-          <Typography color="text.secondary">No active positions</Typography>
+          <Typography color="text.secondary">无活动持仓</Typography>
         </Paper>
       );
     }
@@ -64,9 +64,9 @@ const PositionCard = ({ position }) => {
       return (
         <Box>
            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">Binance Positions</Typography>
+              <Typography variant="h6">币安持仓</Typography>
               <Typography variant="caption" sx={{ bgcolor: 'background.paper', px: 1, py: 0.5, borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
-                  {positions.length} Active
+                  {positions.length} 活跃
               </Typography>
            </Box>
           {positions.map((p) => (
@@ -79,18 +79,18 @@ const PositionCard = ({ position }) => {
     return (
       <Paper sx={{ overflow: 'hidden' }}>
         <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-          <Typography variant="h6">Binance Positions</Typography>
+          <Typography variant="h6">币安持仓</Typography>
         </Box>
         <TableContainer>
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Symbol</TableCell>
-                <TableCell align="right">Amount</TableCell>
-                <TableCell align="right">Entry</TableCell>
-                <TableCell align="right">Mark Price</TableCell>
-                <TableCell align="right">Liq Price</TableCell>
-                <TableCell align="right">PnL (USDT)</TableCell>
+                <TableCell>币种</TableCell>
+                <TableCell align="right">数量</TableCell>
+                <TableCell align="right">开仓价</TableCell>
+                <TableCell align="right">标记价</TableCell>
+                <TableCell align="right">爆仓价</TableCell>
+                <TableCell align="right">盈亏 (USDT)</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>

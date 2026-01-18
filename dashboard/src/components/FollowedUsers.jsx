@@ -5,7 +5,7 @@ import { Person as PersonIcon } from '@mui/icons-material';
 const FollowedUsers = ({ accounts, mode }) => {
   return (
     <Paper sx={{ p: 2, mb: 3 }}>
-      <Typography variant="h6" gutterBottom>Followed Users</Typography>
+      <Typography variant="h6" gutterBottom>跟随用户</Typography>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {Object.entries(accounts.hyperliquid).map(([address, equity]) => (
           <Box 
@@ -36,7 +36,7 @@ const FollowedUsers = ({ accounts, mode }) => {
       </Box>
       <Divider sx={{ my: 2 }} />
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="body2" color="text.secondary">Operating Mode</Typography>
+        <Typography variant="body2" color="text.secondary">运行模式</Typography>
         <Typography variant="body2" sx={{ fontWeight: 'bold', bgcolor: 'primary.dark', px: 1, borderRadius: 0.5, fontSize: '0.75rem' }}>
             {mode.toUpperCase()}
         </Typography>
