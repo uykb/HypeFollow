@@ -1,250 +1,86 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Box, Container, Grid, Paper, Typography, AppBar, Toolbar, 
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Card, CardContent, Chip, IconButton, Button, Switch, FormControlLabel,
-  Divider, List, ListItem, ListItemText, Alert
-} from '@mui/material';
-import { 
-  Refresh as RefreshIcon, 
-  Error as ErrorIcon, 
-  CheckCircle as CheckCircleIcon,
-  FiberManualRecord as StatusIcon,
-  TrendingUp, TrendingDown, AccountBalance, Speed
-} from '@mui/icons-material';
-import { 
-  PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip,
-  LineChart, Line, XAxis, YAxis, CartesianGrid
-} from 'recharts';
+import React from 'react';
+import { ThemeProvider, CssBaseline, Container, Grid, Box, Typography, CircularProgress } from '@mui/material';
+import { TrendingUp, Speed, AccountBalance, CheckCircle } from '@mui/icons-material';
 
-const API_BASE = window.location.origin;
-const WS_URL = window.location.origin.replace(/^http/, 'ws');
+import theme from './theme/theme';
+import { useWebSocket } from './hooks/useWebSocket';
+
+import Header from './components/Header';
+import StatCard from './components/StatCard';
+import PositionsList from './components/PositionsList';
+import OrderMappings from './components/OrderMappings';
+import FollowedUsers from './components/FollowedUsers';
+import LogsPanel from './components/LogsPanel';
 
 function App() {
-  const [snapshot, setSnapshot] = useState(null);
-  const [logs, setLogs] = useState([]);
-  const [connected, setConnected] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState(null);
-
-  useEffect(() => {
-    let ws;
-    let reconnectTimer;
-
-    const connect = () => {
-      ws = new WebSocket(WS_URL);
-
-      ws.onopen = () => {
-        setConnected(true);
-        console.log('Connected to monitor WS');
-      };
-
-      ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'snapshot' || msg.type === 'update') {
-          setSnapshot(msg.data);
-          setLastUpdate(new Date());
-        } else if (msg.type === 'logs') {
-          setLogs(msg.data);
-        } else if (msg.type === 'log') {
-          setLogs(prev => [msg.data, ...prev].slice(0, 100));
-        }
-      };
-
-      ws.onclose = () => {
-        setConnected(false);
-        console.log('Monitor WS closed');
-        reconnectTimer = setTimeout(connect, 3000);
-      };
-
-      ws.onerror = (err) => {
-        console.error('WS error', err);
-        ws.close();
-      };
-    };
-
-    connect();
-
-    return () => {
-      if (ws) ws.close();
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-    };
-  }, []);
+  const { snapshot, logs, connected, lastUpdate } = useWebSocket();
 
   if (!snapshot) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column' }}>
-        <Typography variant="h5" gutterBottom>HypeFollow Monitoring</Typography>
-        <Typography color="textSecondary">Waiting for data...</Typography>
-      </Box>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', bgcolor: 'background.default' }}>
+          <CircularProgress size={60} thickness={4} />
+          <Typography variant="h6" sx={{ mt: 3, color: 'text.secondary' }}>Initializing HypeFollow...</Typography>
+        </Box>
+      </ThemeProvider>
     );
   }
 
   const { stats, accounts, mappings, config } = snapshot;
 
   return (
-    <Box sx={{ flexGrow: 1, pb: 4 }}>
-      <AppBar position="static" sx={{ mb: 3, bgcolor: 'background.paper', color: 'text.primary' }}>
-        <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1, display: 'flex', alignItems: 'center' }}>
-            HypeFollow Monitor
-            <Chip 
-              icon={<StatusIcon sx={{ fontSize: '12px !important' }} />} 
-              label={connected ? "Live" : "Disconnected"} 
-              color={connected ? "success" : "error"} 
-              size="small" 
-              sx={{ ml: 2 }} 
-            />
-          </Typography>
-          <Typography variant="body2" sx={{ mr: 2 }} color="textSecondary">
-            Last Update: {lastUpdate?.toLocaleTimeString()}
-          </Typography>
-          <Button 
-            color={config.emergencyStop ? "error" : "success"} 
-            variant="contained" 
-            size="small"
-            startIcon={<ErrorIcon />}
-          >
-            {config.emergencyStop ? "EMERGENCY STOPPED" : "SYSTEM ACTIVE"}
-          </Button>
-        </Toolbar>
-      </AppBar>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Box sx={{ minHeight: '100vh', pb: 4, bgcolor: 'background.default' }}>
+        <Header 
+            connected={connected} 
+            lastUpdate={lastUpdate} 
+            emergencyStop={config.emergencyStop} 
+        />
 
-      <Container maxWidth="xl">
-        <Grid container spacing={3}>
-          {/* Summary Cards */}
-          <Grid item xs={12} sm={6} md={3}>
-            <StatCard title="Total Orders" value={stats.totalOrders} icon={<TrendingUp color="primary" />} />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <StatCard title="Total Fills" value={stats.totalFills} icon={<Speed color="secondary" />} />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <StatCard title="Binance Equity" value={`$${accounts.binance.equity.toFixed(2)}`} icon={<AccountBalance color="success" />} />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <StatCard title="System Uptime" value={`${Math.floor(stats.uptime / 3600)}h ${Math.floor((stats.uptime % 3600) / 60)}m`} icon={<CheckCircleIcon color="info" />} />
+        <Container maxWidth="xl" sx={{ mt: 3 }}>
+          {/* Top Stats Row */}
+          <Grid container spacing={2} sx={{ mb: 3 }}>
+            <Grid item xs={6} sm={6} md={3}>
+              <StatCard title="Total Orders" value={stats.totalOrders} icon={<TrendingUp />} color="primary" />
+            </Grid>
+            <Grid item xs={6} sm={6} md={3}>
+              <StatCard title="Total Fills" value={stats.totalFills} icon={<Speed />} color="info" />
+            </Grid>
+            <Grid item xs={6} sm={6} md={3}>
+              <StatCard title="Binance Equity" value={`$${accounts.binance.equity.toFixed(2)}`} icon={<AccountBalance />} color="warning" />
+            </Grid>
+            <Grid item xs={6} sm={6} md={3}>
+              <StatCard 
+                title="System Uptime" 
+                value={`${Math.floor(stats.uptime / 3600)}h ${Math.floor((stats.uptime % 3600) / 60)}m`} 
+                icon={<CheckCircle />} 
+                color="secondary" 
+              />
+            </Grid>
           </Grid>
 
-          {/* Account Details */}
-          <Grid item xs={12} md={8}>
-            <Paper sx={{ p: 2, mb: 3 }}>
-              <Typography variant="h6" gutterBottom>Binance Positions</Typography>
-              <TableContainer>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Symbol</TableCell>
-                      <TableCell align="right">Amount</TableCell>
-                      <TableCell align="right">Entry</TableCell>
-                      <TableCell align="right">Mark</TableCell>
-                      <TableCell align="right">PnL</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {accounts.binance.positions.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} align="center">No active positions</TableCell></TableRow>
-                    ) : accounts.binance.positions.map((p) => (
-                      <TableRow key={p.symbol}>
-                        <TableCell component="th" scope="row">{p.symbol}</TableCell>
-                        <TableCell align="right">{parseFloat(p.amount).toFixed(3)}</TableCell>
-                        <TableCell align="right">{parseFloat(p.entryPrice).toFixed(2)}</TableCell>
-                        <TableCell align="right">{parseFloat(p.markPrice).toFixed(2)}</TableCell>
-                        <TableCell align="right" sx={{ color: parseFloat(p.unrealizedProfit) >= 0 ? '#4caf50' : '#f44336' }}>
-                          {parseFloat(p.unrealizedProfit).toFixed(2)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Paper>
-
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>Active Order Mappings</Typography>
-              <TableContainer sx={{ maxHeight: 300 }}>
-                <Table size="small" stickyHeader>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Hyperliquid OID</TableCell>
-                      <TableCell>Binance Order ID</TableCell>
-                      <TableCell>Symbol</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {mappings.length === 0 ? (
-                      <TableRow><TableCell colSpan={3} align="center">No active mappings</TableCell></TableRow>
-                    ) : mappings.map((m) => (
-                      <TableRow key={m.hyperOid}>
-                        <TableCell>{m.hyperOid}</TableCell>
-                        <TableCell>{m.binanceOrderId}</TableCell>
-                        <TableCell>{m.symbol}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Paper>
-          </Grid>
-
-          {/* Sidebar */}
-          <Grid item xs={12} md={4}>
-            <Paper sx={{ p: 2, mb: 3 }}>
-              <Typography variant="h6" gutterBottom>Followed Users</Typography>
-              {Object.entries(accounts.hyperliquid).map(([address, equity]) => (
-                <Box key={address} sx={{ mb: 1, p: 1, borderRadius: 1, bgcolor: 'action.hover' }}>
-                  <Typography variant="caption" color="textSecondary" sx={{ display: 'block' }}>
-                    {address}
-                  </Typography>
-                  <Typography variant="body1">
-                    Equity: <strong>${equity.toFixed(2)}</strong>
-                  </Typography>
-                </Box>
-              ))}
-              <Divider sx={{ my: 2 }} />
-              <Typography variant="body2" color="textSecondary">
-                Mode: <strong>{config.mode.toUpperCase()}</strong>
-              </Typography>
-            </Paper>
-
-            <Paper sx={{ p: 2, height: 500, display: 'flex', flexDirection: 'column' }}>
-              <Typography variant="h6" gutterBottom>System Logs</Typography>
-              <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
-                <List dense>
-                  {logs.map((log, i) => (
-                    <ListItem key={i} sx={{ px: 0, py: 0.5 }}>
-                      <ListItemText 
-                        primary={log.message}
-                        secondary={`${new Date(log.timestamp).toLocaleTimeString()} - ${log.level}`}
-                        primaryTypographyProps={{ variant: 'body2', color: log.level === 'error' ? 'error' : 'inherit' }}
-                        secondaryTypographyProps={{ variant: 'caption' }}
-                      />
-                    </ListItem>
-                  ))}
-                </List>
+          <Grid container spacing={3}>
+            {/* Main Content Area */}
+            <Grid item xs={12} lg={8}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <PositionsList positions={accounts.binance.positions} />
+                <OrderMappings mappings={mappings} />
               </Box>
-            </Paper>
-          </Grid>
-        </Grid>
-      </Container>
-    </Box>
-  );
-}
+            </Grid>
 
-function StatCard({ title, value, icon }) {
-  return (
-    <Card sx={{ bgcolor: 'background.paper' }}>
-      <CardContent sx={{ display: 'flex', alignItems: 'center', p: '16px !important' }}>
-        <Box sx={{ mr: 2 }}>{icon}</Box>
-        <Box>
-          <Typography color="textSecondary" variant="caption" gutterBottom>
-            {title}
-          </Typography>
-          <Typography variant="h6">
-            {value}
-          </Typography>
-        </Box>
-      </CardContent>
-    </Card>
+            {/* Sidebar Area */}
+            <Grid item xs={12} lg={4}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <FollowedUsers accounts={accounts} mode={config.mode} />
+                <LogsPanel logs={logs} />
+              </Box>
+            </Grid>
+          </Grid>
+        </Container>
+      </Box>
+    </ThemeProvider>
   );
 }
 
