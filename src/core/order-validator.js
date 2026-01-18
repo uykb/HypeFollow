@@ -119,7 +119,11 @@ class OrderValidator {
         await redis.del(failKey);
       } else {
         // Only log network/other errors, do not force delete mapping to avoid losing valid orders
-        logger.error(`Failed to validate order ${hyperOid} (Attempt ${fails})`, error);
+        logger.error(`Failed to validate order ${hyperOid} (Attempt ${fails})`, {
+          message: error.message,
+          code: error.code,
+          fullError: error
+        });
       }
     }
   }
