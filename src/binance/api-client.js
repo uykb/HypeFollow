@@ -19,12 +19,12 @@ class BinanceClient {
   async ensureOneWayMode() {
     try {
       // Check current mode
-      const result = await this.client.futuresPositionSideDual();
+      const result = await this.client.futuresPositionMode();
       // Result format: { dualSidePosition: true/false }
       
       if (result.dualSidePosition) {
         logger.info('Account is in Hedge Mode. Switching to One-Way Mode...');
-        await this.client.futuresChangePositionSideDual({ dualSidePosition: 'false' });
+        await this.client.futuresPositionModeChange({ dualSidePosition: 'false' });
         logger.info('Successfully switched to One-Way Mode.');
       } else {
         logger.info('Account is already in One-Way Mode.');
