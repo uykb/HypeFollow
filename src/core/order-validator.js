@@ -118,12 +118,8 @@ class OrderValidator {
         await orderMapper.deleteMapping(hyperOid);
         await redis.del(failKey);
       } else {
-        logger.error(`Failed to validate order ${hyperOid} (Attempt ${fails}/3)`, error);
-        if (fails >= 3) {
-          logger.warn(`Order ${hyperOid} failed validation 3 times. Force removing mapping.`);
-          await orderMapper.deleteMapping(hyperOid);
-          await redis.del(failKey);
-        }
+        // Only log network/other errors, do not force delete mapping to avoid losing valid orders
+        logger.error(`Failed to validate order ${hyperOid} (Attempt ${fails})`, error);
       }
     }
   }

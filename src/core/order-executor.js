@@ -292,6 +292,11 @@ class OrderExecutor {
             
             const binanceOrder = await binanceClient.createMarketOrder(coin, side, enforcedQuantity);
             
+            if (binanceOrder && binanceOrder.orderId) {
+              const symbol = binanceClient.getBinanceSymbol(coin);
+              await orderMapper.saveMapping(fillId, binanceOrder.orderId, symbol);
+            }
+
              await consistencyEngine.markOrderProcessed(fillId, {
               type: 'market-enforced',
               coin, side,
@@ -318,6 +323,11 @@ class OrderExecutor {
       }
 
       const binanceOrder = await binanceClient.createMarketOrder(coin, side, quantity);
+
+      if (binanceOrder && binanceOrder.orderId) {
+        const symbol = binanceClient.getBinanceSymbol(coin);
+        await orderMapper.saveMapping(fillId, binanceOrder.orderId, symbol);
+      }
 
       await consistencyEngine.markOrderProcessed(fillId, {
         type: 'market',
