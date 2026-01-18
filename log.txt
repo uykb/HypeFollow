@@ -1,0 +1,78 @@
+Starting Redis server...
+Waiting for Redis to be ready...
+Redis is ready.
+Starting application...
+[dotenv@17.2.3] injecting env (0) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+WARNING: NODE_ENV value of 'production' did not match any deployment config file names.
+WARNING: See https://github.com/node-config/node-config/wiki/Strict-Mode
+{"level":"INFO","timestamp":"2026-01-18T07:23:00.616Z","message":"Starting HypeFollow System (Enhanced)..."}
+{"level":"WARN","timestamp":"2026-01-18T07:23:00.617Z","message":"⚠️  PRODUCTION MODE DETECTED - Real funds will be used!"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:00.617Z","message":"✅ API configuration format validated"}
+{"level":"WARN","timestamp":"2026-01-18T07:23:00.617Z","message":"📝 Security Tip: No BINANCE_ALLOWED_IPS configured. Recommend setting up IP whitelist in Binance API management."}
+{"level":"INFO","timestamp":"2026-01-18T07:23:00.618Z","message":"Verifying API read permissions..."}
+{"level":"INFO","timestamp":"2026-01-18T07:23:01.415Z","message":"Connected to Redis"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:02.216Z","message":"✅ API read permission verified"}
+{"level":"WARN","timestamp":"2026-01-18T07:23:02.313Z","message":"🛑 MAINNET DETECTED: Ensure API key has ONLY \"Futures\" trading permission. \"Withdrawal\" MUST be disabled."}
+{"level":"ERROR","timestamp":"2026-01-18T07:23:02.314Z","message":"Failed to ensure One-Way Mode"}
+{"level":"WARN","timestamp":"2026-01-18T07:23:02.314Z","message":"Failed to automatically verify/set One-Way Mode. Please ensure your Binance Futures account is in \"One-Way Mode\" manually.","error":"this.client.futuresPositionSideDual is not a function"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:02.315Z","message":"🚀 API security validation passed"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:02.419Z","message":"Monitoring Data Collector started"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:02.419Z","message":"Initializing Position Tracker for 0xdae4df7207feb3b350e4284c8efe5f7dac37f637..."}
+{"level":"INFO","timestamp":"2026-01-18T07:23:02.615Z","message":"Monitoring API Server running on http://0.0.0.0:49618"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:02.818Z","message":"Hyperliquid account value: 104288.359014 for 0xdae4df7207feb3b350e4284c8efe5f7dac37f637"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:02.820Z","message":"Tracked initial position for BTC: -0.05022 (Pending Sync)"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:02.913Z","message":"Running startup cleanup for stale order mappings..."}
+{"level":"INFO","timestamp":"2026-01-18T07:23:02.913Z","message":"Order status validator started"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:02.919Z","message":"Subscribed to Binance User Data Stream"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:04.113Z","message":"Binance total equity: 575.95945707"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:04.315Z","message":"Connected to Hyperliquid WebSocket"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:04.413Z","message":"Subscribed to orderUpdates for user: 0xdae4df7207feb3b350e4284c8efe5f7dac37f637"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:04.413Z","message":"Subscribed to userFills for user: 0xdae4df7207feb3b350e4284c8efe5f7dac37f637"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:04.414Z","message":"Starting initial sync of open orders..."}
+{"level":"INFO","timestamp":"2026-01-18T07:23:04.520Z","message":"Fetched 20 active Binance orders for sync reconciliation."}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.013Z","message":"Found 20 existing open orders for 0xdae4df7207feb3b350e4284c8efe5f7dac37f637. Syncing..."}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.014Z","message":"[Sync] Recovered mapping: HL 296215285613 <-> Binance 885690651683"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.018Z","message":"[Sync] Recovered mapping: HL 296215267731 <-> Binance 885690651814"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.113Z","message":"New monitoring client connected"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.213Z","message":"[Sync] Recovered mapping: HL 296215202530 <-> Binance 885690652071"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.219Z","message":"[Sync] Recovered mapping: HL 296214960605 <-> Binance 885690652628"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.222Z","message":"[Sync] Recovered mapping: HL 296214893993 <-> Binance 885690653089"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.316Z","message":"[Sync] Recovered mapping: HL 296214235187 <-> Binance 885690653469"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.318Z","message":"[Sync] Recovered mapping: HL 296214218625 <-> Binance 885690653615"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.319Z","message":"[Sync] Recovered mapping: HL 294677206538 <-> Binance 885690655742"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.321Z","message":"[Sync] Recovered mapping: HL 294676480076 <-> Binance 885690654550"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.414Z","message":"[Sync] Recovered mapping: HL 294215174919 <-> Binance 885690656660"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.416Z","message":"[Sync] Recovered mapping: HL 294215136748 <-> Binance 885690657644"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.417Z","message":"[Sync] Recovered mapping: HL 288069693048 <-> Binance 885690657189"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.419Z","message":"[Sync] Recovered mapping: HL 288069693007 <-> Binance 885690658194"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.421Z","message":"[Sync] Recovered mapping: HL 288069514311 <-> Binance 885690658843"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.516Z","message":"[Sync] Recovered mapping: HL 288069481523 <-> Binance 885690658484"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.518Z","message":"[Sync] Recovered mapping: HL 288069359926 <-> Binance 885690658578"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.522Z","message":"[Sync] Recovered mapping: HL 288069013728 <-> Binance 885690658697"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.523Z","message":"[Sync] Recovered mapping: HL 288068549311 <-> Binance 885690658995"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.613Z","message":"[Sync] Recovered mapping: HL 286716677945 <-> Binance 885690661276"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:05.615Z","message":"[Sync] Recovered mapping: HL 286716656020 <-> Binance 885690661810"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:29.449Z","message":"Monitoring client disconnected"}
+{"level":"INFO","timestamp":"2026-01-18T07:23:31.062Z","message":"New monitoring client connected"}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:02.917Z","message":"Failed to validate order 286716656020 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:02.919Z","message":"Failed to validate order 296215285613 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:02.920Z","message":"Failed to validate order 288069693048 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:02.921Z","message":"Failed to validate order 294677206538 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:02.922Z","message":"Failed to validate order 288069514311 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:02.923Z","message":"Failed to validate order 288068549311 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:02.925Z","message":"Failed to validate order 296214235187 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:03.013Z","message":"Failed to validate order 294676480076 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:03.016Z","message":"Failed to validate order 288069693007 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:03.018Z","message":"Failed to validate order 296214960605 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:03.019Z","message":"Failed to validate order 288069481523 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:03.021Z","message":"Failed to validate order 294215136748 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:03.113Z","message":"Failed to validate order 296215267731 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:03.117Z","message":"Failed to validate order 296215202530 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:03.118Z","message":"Failed to validate order 294215174919 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:03.120Z","message":"Failed to validate order 288069013728 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:03.121Z","message":"Failed to validate order 296214218625 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:03.122Z","message":"Failed to validate order 288069359926 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:03.123Z","message":"Failed to validate order 286716677945 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"ERROR","timestamp":"2026-01-18T07:24:03.124Z","message":"Failed to validate order 296214893993 (Attempt 1)","errorMessage":"Method order requires side parameter."}
+{"level":"INFO","timestamp":"2026-01-18T07:24:07.538Z","message":"Hyperliquid account value: 104287.455054 for 0xdae4df7207feb3b350e4284c8efe5f7dac37f637"}
+{"level":"INFO","timestamp":"2026-01-18T07:24:07.824Z","message":"Binance total equity: 575.95945707"}

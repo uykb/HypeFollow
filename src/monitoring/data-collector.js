@@ -25,18 +25,26 @@ class DataCollector extends EventEmitter {
         hyperliquid: {},
         binance: { equity: 0, positions: [] }
       },
-      orderMappings: []
+      orderMappings: [],
+      history: {
+        equity: [], // [{ timestamp, hlEquity, bnEquity }]
+        trades: [], // [{ timestamp, symbol, side, size, price, latency, slippage }]
+        latency: [] // [ms, ms, ...] for distribution
+      }
     };
   }
 
   start() {
     this.timer = setInterval(() => this.collectData(), this.refreshInterval);
+    // History collection interval (e.g., every 5 minutes for equity)
+    this.historyTimer = setInterval(() => this.collectHistorySnapshot(), 60000); // 1 minute resolution for now
     this.collectData(); // Initial collection
     logger.info('Monitoring Data Collector started');
   }
 
   stop() {
     if (this.timer) clearInterval(this.timer);
+    if (this.historyTimer) clearInterval(this.historyTimer);
   }
 
   addLog(level, message, meta = {}) {
@@ -51,6 +59,65 @@ class DataCollector extends EventEmitter {
       this.recentLogs.pop();
     }
     this.emit('log', logEntry);
+  }
+
+  // --- New Methods for Enhanced Data ---
+
+  async recordTrade(tradeData) {
+    // tradeData: { symbol, side, size, price, timestamp, latency, slippage, type }
+    const trade = {
+      ...tradeData,
+      recordedAt: Date.now()
+    };
+    
+    // Maintain fixed size buffer
+    this.cache.history.trades.unshift(trade);
+    if (this.cache.history.trades.length > 50) {
+      this.cache.history.trades.pop();
+    }
+    
+    // Record Latency
+    if (tradeData.latency) {
+      this.cache.history.latency.push(tradeData.latency);
+      if (this.cache.history.latency.length > 100) {
+        this.cache.history.latency.shift();
+      }
+    }
+
+    // Persist to Redis (List) - Optional for MVP, but good for persistence
+    // await redis.lpush('stats:trade_history', JSON.stringify(trade));
+    // await redis.ltrim('stats:trade_history', 0, 99);
+    
+    this.emit('update', this.getSnapshot());
+  }
+
+  async collectHistorySnapshot() {
+    try {
+      // Create equity snapshot point
+      const hlEquity = Object.values(this.cache.accounts.hyperliquid).reduce((a, b) => a + b, 0);
+      const bnEquity = this.cache.accounts.binance.equity;
+      
+      if (hlEquity > 0 && bnEquity > 0) {
+        const point = {
+          timestamp: Date.now(),
+          hlEquity,
+          bnEquity
+        };
+        
+        this.cache.history.equity.push(point);
+        
+        // Keep last 24h data (assuming 1 min interval = 1440 points)
+        if (this.cache.history.equity.length > 1440) {
+          this.cache.history.equity.shift();
+        }
+        
+        // Persist to Redis
+        // await redis.lpush('stats:equity_history', JSON.stringify(point));
+        // await redis.ltrim('stats:equity_history', 0, 1439);
+      }
+    } catch (e) {
+      logger.warn('Failed to collect history snapshot', e);
+    }
   }
 
   async collectData() {
@@ -92,7 +159,8 @@ class DataCollector extends EventEmitter {
           entryPrice: p.entryPrice,
           markPrice: p.markPrice,
           unrealizedProfit: p.unrealizedProfit,
-          leverage: p.leverage
+          leverage: p.leverage,
+          liquidationPrice: p.liquidationPrice // Added Liquidation Price
         }))
       };
     } catch (e) {
@@ -129,6 +197,7 @@ class DataCollector extends EventEmitter {
       },
       accounts: this.cache.accounts,
       mappings: this.cache.orderMappings,
+      history: this.cache.history, // Expose history
       config: {
         mode: config.get('trading.mode'),
         followedUsers: this.followedUsers,

@@ -6,6 +6,7 @@ const positionTracker = require('./position-tracker');
 const consistencyEngine = require('./consistency-engine');
 const riskControl = require('./risk-control');
 const positionCalculator = require('./position-calculator');
+const dataCollector = require('../monitoring/data-collector'); // Import DataCollector
 
 class OrderExecutor {
   
@@ -129,6 +130,16 @@ class OrderExecutor {
                const symbol = binanceClient.getBinanceSymbol(coin);
                await orderMapper.saveMapping(oid, binanceOrder.orderId, symbol);
                
+               // Record Trade Stats
+               dataCollector.recordTrade({
+                 symbol,
+                 side,
+                 size: enforcedQuantity,
+                 price: limitPx,
+                 latency: Date.now() - (orderData.timestamp || Date.now()),
+                 type: 'limit-enforced'
+               });
+
                await consistencyEngine.markOrderProcessed(oid, {
                 type: 'limit-enforced',
                 coin, side,
@@ -169,6 +180,16 @@ class OrderExecutor {
         const symbol = binanceClient.getBinanceSymbol(coin);
         await orderMapper.saveMapping(oid, binanceOrder.orderId, symbol);
       
+        // Record Trade Stats
+        dataCollector.recordTrade({
+          symbol,
+          side,
+          size: quantity,
+          price: limitPx,
+          latency: Date.now() - (orderData.timestamp || Date.now()),
+          type: 'limit'
+        });
+
         await consistencyEngine.markOrderProcessed(oid, {
           type: 'limit',
           coin, side,
@@ -296,6 +317,18 @@ class OrderExecutor {
               const symbol = binanceClient.getBinanceSymbol(coin);
               await orderMapper.saveMapping(fillId, binanceOrder.orderId, symbol);
             }
+            
+            // Record Trade Stats (Market)
+            // For fills, latency is diff between fill time and now
+            dataCollector.recordTrade({
+                 symbol: binanceClient.getBinanceSymbol(coin),
+                 side,
+                 size: enforcedQuantity,
+                 price: px, 
+                 latency: Date.now() - (timestamp || Date.now()),
+                 slippage: 0, // Hard to calc exact without execution price, assume close for now or use fill price
+                 type: 'market-enforced'
+            });
 
              await consistencyEngine.markOrderProcessed(fillId, {
               type: 'market-enforced',
@@ -328,6 +361,16 @@ class OrderExecutor {
         const symbol = binanceClient.getBinanceSymbol(coin);
         await orderMapper.saveMapping(fillId, binanceOrder.orderId, symbol);
       }
+
+      // Record Trade Stats
+      dataCollector.recordTrade({
+          symbol: binanceClient.getBinanceSymbol(coin),
+          side,
+          size: quantity,
+          price: px,
+          latency: Date.now() - (timestamp || Date.now()),
+          type: 'market'
+      });
 
       await consistencyEngine.markOrderProcessed(fillId, {
         type: 'market',

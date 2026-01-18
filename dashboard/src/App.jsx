@@ -11,6 +11,8 @@ import PositionsList from './components/PositionsList';
 import OrderMappings from './components/OrderMappings';
 import FollowedUsers from './components/FollowedUsers';
 import LogsPanel from './components/LogsPanel';
+import EquityChart from './components/EquityChart';
+import TradeHistory from './components/TradeHistory';
 
 function App() {
   const { snapshot, logs, connected, lastUpdate } = useWebSocket();
@@ -27,7 +29,7 @@ function App() {
     );
   }
 
-  const { stats, accounts, mappings, config } = snapshot;
+  const { stats, accounts, mappings, config, history } = snapshot;
 
   return (
     <ThemeProvider theme={theme}>
@@ -65,8 +67,16 @@ function App() {
             {/* Main Content Area */}
             <Grid item xs={12} lg={8}>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <EquityChart data={history?.equity || []} />
                 <PositionsList positions={accounts.binance.positions} />
-                <OrderMappings mappings={mappings} />
+                <Grid container spacing={3}>
+                  <Grid item xs={12} md={6}>
+                    <OrderMappings mappings={mappings} />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TradeHistory trades={history?.trades || []} />
+                  </Grid>
+                </Grid>
               </Box>
             </Grid>
 
