@@ -53,10 +53,10 @@ async function runTests() {
   console.log('Test 3: Boundary Conditions (Min Size)');
   positionCalculator.equalRatio = 1; 
   // 0.001 * (500/100000) * 1 = 0.000005
-  // Min size for BTC is 0.001
+  // Min size for BTC is 0.002
   const qty3 = await positionCalculator.calculateQuantity('BTC', 0.001, MOCK_HL_ADDRESS);
   console.log(`Input: 0.001 BTC (Result < Min), Result: ${qty3}`);
-  assert.strictEqual(qty3, 0.001, 'Should return min size (0.001) for quantity below minimum');
+  assert.strictEqual(qty3, 0.002, 'Should return min size (0.002) for quantity below minimum');
   console.log('PASS\n');
 
   // --- Test 4: Mode Switching (Fixed Mode) ---

@@ -52,7 +52,7 @@ module.exports = {
 
     // Min order sizes (static config - to be enhanced with API data if needed)
     minOrderSize: {
-      BTC: { open: 0.002, close: 0.001 },
+      BTC: 0.002,
       ETH: 0.007,
       SOL: 0.04
     }

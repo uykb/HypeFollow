@@ -37,16 +37,7 @@ class PositionCalculator {
       }
 
       // Check min order size
-      let minSize = 0;
-      const configSize = this.minOrderSizes[coin];
-      
-      if (typeof configSize === 'object') {
-        // Handle split config { open: x, close: y }
-        minSize = configSize[actionType] || 0;
-      } else {
-        // Handle legacy number config
-        minSize = configSize || 0;
-      }
+      const minSize = this.minOrderSizes[coin] || 0;
 
       if (calculatedQuantity < minSize) {
         logger.warn(`Calculated quantity ${calculatedQuantity} for ${coin} (${actionType}) below minimum ${minSize}, forcing minimum size`);
