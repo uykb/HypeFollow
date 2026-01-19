@@ -221,10 +221,16 @@ class HyperliquidWS extends EventEmitter {
               const hlPriceFormatted = binanceClient.roundPrice(order.coin, order.limitPx);
               const binanceSide = order.side === 'B' ? 'BUY' : 'SELL';
 
-              const matchIndex = candidates.findIndex(bo => 
-                bo.side === binanceSide && 
-                parseFloat(bo.price) === parseFloat(hlPriceFormatted)
-              );
+              const matchIndex = candidates.findIndex(bo => {
+                const priceDiff = Math.abs(parseFloat(bo.price) - parseFloat(hlPriceFormatted));
+                // Allow small tolerance for floating point or rounding differences
+                // e.g. 0.0001 or 0.1% of price? 
+                // Using 0.0001 absolute tolerance for now, assuming similar precision.
+                // Or better: check if priceDiff / price < 0.0001 (0.01%)
+                const isPriceMatch = priceDiff < 0.0001 || (parseFloat(bo.price) > 0 && priceDiff / parseFloat(bo.price) < 0.0001);
+                
+                return bo.side === binanceSide && isPriceMatch;
+              });
 
               if (matchIndex !== -1) {
                 const matchedOrder = candidates[matchIndex];
@@ -243,10 +249,13 @@ class HyperliquidWS extends EventEmitter {
 
                 // Remove from map to prevent Pruning later (though Pruning checks Redis, so it's fine)
                 continue; // Skip Emit
+              } else {
+                 logger.debug(`[Sync] No match found for HL ${order.oid} (${order.coin} ${order.side} ${hlPriceFormatted}). Candidates: ${candidates.length}`);
               }
             }
             
             // C. Create New
+            logger.info(`[Sync] Emitting NEW order event for HL ${order.oid}`);
             this.emit('order', standardizedOrder);
             await new Promise(resolve => setTimeout(resolve, 50));
           }
@@ -289,9 +298,18 @@ class HyperliquidWS extends EventEmitter {
     const { channel, data } = message;
 
     if (channel === 'orderUpdates') {
+      logger.debug('WS: Received orderUpdates', { data }); // Detailed log
       const order = parsers.parseOrderUpdate(data);
       if (order) {
+        // Fallback for userAddress if missing (MVP assumption: single user)
+        if (!order.userAddress && this.followedUsers.length > 0) {
+           order.userAddress = this.followedUsers[0];
+        }
+        
+        logger.info(`WS: Parsed order event: ${order.status} ${order.coin} ${order.oid}`);
         this.emit('order', order);
+      } else {
+        logger.debug('WS: parseOrderUpdate returned null');
       }
     } else if (channel === 'userFills') {
       const fills = parsers.parseUserFills(data);
