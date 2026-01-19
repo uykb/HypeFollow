@@ -7,6 +7,7 @@ const consistencyEngine = require('./consistency-engine');
 const riskControl = require('./risk-control');
 const positionCalculator = require('./position-calculator');
 const dataCollector = require('../monitoring/data-collector'); // Import DataCollector
+const exposureManager = require('./exposure-manager');
 
 class OrderExecutor {
   
@@ -151,112 +152,13 @@ class OrderExecutor {
               });
 
               // Update Delta: We consumed the Pending Delta (Total Size - Order Size)
-              const deltaCleared = signedTotalSize - signedMasterOrderSize;
-              await positionTracker.consumePendingDelta(coin, deltaCleared);
-              return;
-            }
-          }
-        }
+      const deltaCleared = signedTotalSize - signedMasterOrderSize;
+      await positionTracker.consumePendingDelta(coin, deltaCleared);
 
-        // Skipped and not enforced. Accumulate delta for next execution (Scheme C+)
-        await positionTracker.addPendingDelta(coin, signedMasterOrderSize);
-        return;
-      }
-
-      // 4. Check Risk
-      if (!riskControl.checkPositionLimit(coin, currentPos, quantity)) {
-        // Blocked by Risk. Target moved, we didn't. Add to Delta.
-        await positionTracker.addPendingDelta(coin, signedMasterOrderSize);
-        return;
-      }
-
-      // 5. Execute Order
-      const binanceOrder = await binanceClient.createLimitOrder(
-        coin, side, limitPx, quantity
-      );
-
-      // 6. Post-Process
-      if (binanceOrder && binanceOrder.orderId) {
-        const symbol = binanceClient.getBinanceSymbol(coin);
-        await orderMapper.saveMapping(oid, binanceOrder.orderId, symbol);
-      
-        // Record Trade Stats
-        dataCollector.recordTrade({
-          symbol,
-          side,
-          size: quantity,
-          price: limitPx,
-          latency: Date.now() - (orderData.timestamp || Date.now()),
-          type: 'limit'
-        });
-
-        await consistencyEngine.markOrderProcessed(oid, {
-          type: 'limit',
-          coin, side,
-          masterSize: masterOrderSize,
-          totalMasterSize: absTotalSize,
-          followerSize: quantity,
-          price: limitPx,
-          binanceOrderId: binanceOrder.orderId
-        });
-
-        // 7. Update Delta
-        // We need to reflect that we executed `signedTotalSize`.
-        // Formula: New Delta = Old Delta + Order - Executed.
-        // Here, Executed IS TotalSize (which is OldDelta + Order).
-        // So New Delta = Old Delta + Order - (OldDelta + Order) = 0.
-        // EXCEPT if we didn't execute *exactly* TotalSize due to rounding/minSize in `calculateQuantity`.
-        // `positionCalculator` might adjust `quantity`.
-        // But `quantity` is Follower's size. `TotalSize` is Master's units.
-        // We should track Master's Units in Delta.
-        // So we assume we fully executed the Master's intent.
-        // So we Consume the full TotalSize.
-        // `consumePendingDelta` reduces delta by amount.
-        // If we executed `signedTotalSize`, and originally `signedMasterOrderSize` was the new input.
-        // The `pendingDelta` stored in Redis was `OldDelta`.
-        // We want `NewDelta` = `OldDelta` + `Order` - `Order` (since we filled it) - `OldDelta` (since we filled it).
-        // Basically, we wiped out the delta and the order.
-        // So we set Delta to 0?
-        // Or rather: `consumePendingDelta` logic:
-        // Input: `amountConsumed`.
-        // We consumed `signedTotalSize` worth of Master's intent.
-        // Wait, `signedTotalSize` = `Order` + `OldDelta`.
-        // If we execute this, we have addressed both the new Order and the Old Delta.
-        // So the remaining Delta should be 0.
-        // But `positionTracker` update logic needs to be careful.
-        // Let's look at `consumePendingDelta`.
-        // It subtracts amount.
-        // If we pass `signedTotalSize - signedMasterOrderSize` (which is `OldDelta`),
-        // Then we are saying we consumed the Delta. The `signedMasterOrderSize` is naturally consumed by the action itself (Target moves, Actual moves).
-        
-        // Wait, `PendingDelta` = `Target - Actual`.
-        // SM Order: Target += Order.
-        // We Exec: Actual += Exec.
-        // We want Redis to hold the NEW (Target - Actual).
-        // Currently Redis holds Old (Target - Actual).
-        // If we do NOTHING to Redis: It holds Old Delta.
-        // But physically Target changed. So implicitly Redis is "Wrong" unless we update it.
-        // We should explicitly update Redis to be:
-        // Redis = OldRedis + Order - Exec.
-        
-        // So, we should call `addPendingDelta(coin, signedMasterOrderSize - signedExecutedMasterUnits)`.
-        // If we executed `signedTotalSize` (which equals Order + OldRedis), then:
-        // Update = Order - (Order + OldRedis) = -OldRedis.
-        // OldRedis + (-OldRedis) = 0.
-        // So yes, we just want to zero out the delta (or reduce it).
-        
-        // Let's implement `consumePendingDelta` as `addPendingDelta(coin, -signedAmountConsumed)`.
-        // Where `signedAmountConsumed` is the amount of *Delta* we cleared.
-        // We cleared `signedTotalSize - signedMasterOrderSize`.
-        
-        const deltaCleared = signedTotalSize - signedMasterOrderSize;
-        // In `PositionTracker`, `consumePendingDelta` does `incrbyfloat(key, -amount)`.
-        // So if we pass `deltaCleared`, it subtracts it.
-        // OldDelta - (Total - Order) = OldDelta - (OldDelta + Order - Order) = 0.
-        // Correct.
-        
-        await positionTracker.consumePendingDelta(coin, deltaCleared);
-      }
+      // Exposure Check & Rebalance
+      exposureManager.checkAndRebalance(coin, userAddress).catch(err => {
+          logger.error(`Failed to run exposure rebalance for ${coin} (Market)`, err);
+      });
 
     } catch (error) {
       logger.error(`Failed to execute limit order ${oid}`, error);
@@ -382,8 +284,19 @@ class OrderExecutor {
         binanceOrderId: binanceOrder.orderId
       });
 
-      const deltaCleared = signedTotalSize - signedMasterOrderSize;
-      await positionTracker.consumePendingDelta(coin, deltaCleared);
+        // 7. Update Delta
+        // ... (existing comments) ...
+        const deltaCleared = signedTotalSize - signedMasterOrderSize;
+        await positionTracker.consumePendingDelta(coin, deltaCleared);
+
+        // 8. Exposure Check & Rebalance (New Risk Control)
+        // Trigger post-execution check to handle min-size induced exposure drift
+        // We run this in background (no await) to not block the main flow, 
+        // or await if we want strict sequentiality. Background is safer for latency.
+        exposureManager.checkAndRebalance(coin, userAddress).catch(err => {
+            logger.error(`Failed to run exposure rebalance for ${coin}`, err);
+        });
+      }
 
     } catch (error) {
       logger.error(`Failed to execute market order for ${coin}`, error);

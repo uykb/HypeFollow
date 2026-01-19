@@ -243,6 +243,74 @@ class BinanceClient {
     }
   }
 
+
+  /**
+   * Get detailed position info (amount, entry price, unrealized profit)
+   * @param {string} coin 
+   * @returns {Promise<object|null>} Position details or null
+   */
+  async getPositionDetails(coin) {
+    try {
+      const symbol = this.getBinanceSymbol(coin);
+      const positions = await this.futuresPositionRisk();
+      const position = positions.find(p => p.symbol === symbol);
+      
+      if (!position) return null;
+      
+      return {
+        amount: parseFloat(position.positionAmt),
+        entryPrice: parseFloat(position.entryPrice),
+        unRealizedProfit: parseFloat(position.unRealizedProfit),
+        leverage: parseInt(position.leverage),
+        liquidationPrice: parseFloat(position.liquidationPrice)
+      };
+    } catch (error) {
+      logger.error(`Failed to get position details for ${coin}`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Create a Reduce-Only limit order (for Take Profit)
+   * @param {string} coin 
+   * @param {string} side 'B' or 'A' (BUY or SELL)
+   * @param {number|string} price 
+   * @param {number|string} quantity 
+   */
+  async createReduceOnlyOrder(coin, side, price, quantity) {
+    const symbol = this.getBinanceSymbol(coin);
+    const binanceSide = side === 'B' ? 'BUY' : 'SELL';
+    
+    // Ensure Price Precision
+    const formattedPrice = this.roundPrice(coin, price);
+    
+    logger.info(`Placing REDUCE-ONLY order on Binance: ${symbol} ${binanceSide} ${quantity} @ ${formattedPrice}`);
+
+    try {
+      const order = await this.client.futuresOrder({
+        symbol: symbol,
+        side: binanceSide,
+        type: 'LIMIT',
+        timeInForce: 'GTC', 
+        quantity: quantity.toString(),
+        price: formattedPrice,
+        reduceOnly: 'true' // Vital for TP
+      });
+      
+      logger.info(`Binance REDUCE-ONLY Order Placed: ${order.orderId}`);
+      return order;
+    } catch (error) {
+      const errorMsg = `Binance Reduce-Only Order Failed: ${error.message} (Code: ${error.code})`;
+      logger.error(errorMsg, {
+        message: error.message,
+        code: error.code,
+        response: error.response?.data,
+        params: { symbol, side: binanceSide, price, quantity }
+      });
+      throw error;
+    }
+  }
+
   /**
    * Get current signed position amount for a coin
    * @param {string} coin 
