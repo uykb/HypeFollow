@@ -47,8 +47,19 @@ class ConsistencyEngine {
    * @param {string} oid 
    */
   async shouldProcessHyperOrder(oid) {
+    // 1. Atomic check-and-set to prevent race conditions (Duplicate Orders)
+    // We use a temporary "processing" flag in Redis
+    const lockKey = `orderLock:${oid}`;
+    const acquired = await redis.set(lockKey, 'true', 'NX', 'EX', 30); // 30s lock
+    
+    if (!acquired) {
+      logger.debug(`Order ${oid} is already being processed or locked, skipping`);
+      return false;
+    }
+
     if (await this.isOrderProcessed(oid)) {
       logger.debug(`Order ${oid} already processed, skipping`);
+      // Keep lock for a bit to be safe, or delete if we are sure
       return false;
     }
 
@@ -60,6 +71,8 @@ class ConsistencyEngine {
           logger.info(`Active Binance order exists for ${oid} (${mapping.orderId}), skipping`);
           return false;
         }
+        // If it's not active, we might want to allow re-processing if it's a sync
+        // But usually, we don't want to double-process.
         return false;
       } catch (error) {
         logger.warn(`Mapping exists for ${oid} but Binance check failed, skipping safety`, error);
@@ -68,6 +81,14 @@ class ConsistencyEngine {
     }
 
     return true;
+  }
+
+  /**
+   * Release the processing lock for an order
+   * @param {string} oid 
+   */
+  async releaseOrderLock(oid) {
+    await redis.del(`orderLock:${oid}`);
   }
 
   /**

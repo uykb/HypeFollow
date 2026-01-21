@@ -69,12 +69,29 @@ class OrderExecutor {
       const isClosing = (currentPos > 0 && side === 'A') || (currentPos < 0 && side === 'B');
       const actionType = isClosing ? 'close' : 'open';
 
-      const quantity = await positionCalculator.calculateQuantity(
+      let quantity = await positionCalculator.calculateQuantity(
         coin,
         Math.abs(signedMasterOrderSize), // Changed from absTotalSize to just Master Order Size for Limit Orders
         userAddress,
         actionType
       );
+
+      // 3.5 Cap Quantity for Reduce-Only orders to avoid Binance -2022 error
+      if (isClosing && quantity > 0) {
+        const binanceSide = side === 'B' ? 'BUY' : 'SELL';
+        const openQty = await binanceClient.getOpenOrderQuantity(coin, binanceSide);
+        const absPos = Math.abs(currentPos);
+        const availableToClose = Math.max(0, absPos - openQty);
+        
+        if (quantity > availableToClose) {
+          if (availableToClose < (config.get('trading.minOrderSize')[coin] || 0)) {
+             logger.warn(`[OrderExecutor] Skipping Reduce-Only order for ${coin} as position is already fully covered by open orders. (Available: ${availableToClose}, Needed: ${quantity})`);
+             return;
+          }
+          logger.info(`[OrderExecutor] Capping Reduce-Only order for ${coin} from ${quantity} to ${availableToClose} to fit remaining position.`);
+          quantity = availableToClose;
+        }
+      }
 
       // Check if we skipped due to min size
       if (!quantity || quantity <= 0) {
@@ -83,12 +100,25 @@ class OrderExecutor {
         const enforcedQuantity = await this.getEnforcedQuantity(coin, quantity, actionType);
         
         if (enforcedQuantity && enforcedQuantity > 0) {
-          // Check Risk for Enforced Quantity
-          if (riskControl.checkPositionLimit(coin, currentPos, enforcedQuantity)) {
-            logger.info(`Force executing min size ${enforcedQuantity} for ${coin} to clear delta`);
+          // Cap enforced quantity too if closing
+          let finalEnforcedQty = enforcedQuantity;
+          if (isClosing) {
+            const binanceSide = side === 'B' ? 'BUY' : 'SELL';
+            const openQty = await binanceClient.getOpenOrderQuantity(coin, binanceSide);
+            const absPos = Math.abs(currentPos);
+            const availableToClose = Math.max(0, absPos - openQty);
+            if (finalEnforcedQty > availableToClose) {
+              finalEnforcedQty = availableToClose;
+            }
+          }
+
+          if (finalEnforcedQty <= 0) {
+            logger.warn(`[OrderExecutor] Cannot enforce min size for ${coin} (closing) as position is exhausted.`);
+          } else if (riskControl.checkPositionLimit(coin, currentPos, finalEnforcedQty)) {
+            logger.info(`Force executing min size ${finalEnforcedQty} for ${coin} to clear delta`);
             
             const binanceOrder = await binanceClient.createLimitOrder(
-              coin, side, limitPx, enforcedQuantity, isClosing
+              coin, side, limitPx, finalEnforcedQty, isClosing
             );
             
             if (binanceOrder && binanceOrder.orderId) {
@@ -183,6 +213,9 @@ class OrderExecutor {
 
     } catch (error) {
       logger.error(`Failed to execute limit order ${oid}`, error);
+    } finally {
+      // Always release the lock so it can be retried or processed by other events if needed
+      await consistencyEngine.releaseOrderLock(oid);
     }
   }
 
@@ -218,12 +251,21 @@ class OrderExecutor {
       const isClosing = (currentPos > 0 && side === 'A') || (currentPos < 0 && side === 'B');
       const actionType = isClosing ? 'close' : 'open';
 
-      const quantity = await positionCalculator.calculateQuantity(
+      let quantity = await positionCalculator.calculateQuantity(
         coin,
         absTotalSize,
         userAddress,
         actionType
       );
+
+      // Cap Market Order if closing
+      if (isClosing && quantity > 0) {
+        const absPos = Math.abs(currentPos);
+        if (quantity > absPos) {
+          logger.info(`[OrderExecutor] Capping Market Close for ${coin} from ${quantity} to ${absPos}`);
+          quantity = absPos;
+        }
+      }
 
       if (!quantity || quantity <= 0) {
         

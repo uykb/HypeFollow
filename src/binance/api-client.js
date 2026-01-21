@@ -111,7 +111,7 @@ class BinanceClient {
       };
 
       if (reduceOnly) {
-        params.reduceOnly = 'true';
+        params.reduceOnly = true;
       }
 
       const order = await this.client.futuresOrder(params);
@@ -152,7 +152,7 @@ class BinanceClient {
       };
 
       if (reduceOnly) {
-        params.reduceOnly = 'true';
+        params.reduceOnly = true;
       }
 
       const order = await this.client.futuresOrder(params);
@@ -308,7 +308,7 @@ class BinanceClient {
         timeInForce: 'GTC', 
         quantity: quantity.toString(),
         price: formattedPrice,
-        reduceOnly: 'true' // Vital for TP
+        reduceOnly: true // Vital for TP
       });
       
       logger.info(`Binance REDUCE-ONLY Order Placed: ${order.orderId}`);
@@ -330,15 +330,22 @@ class BinanceClient {
    * @param {string} coin 
    * @returns {Promise<number>} Signed position amount (Positive=Long, Negative=Short)
    */
-  async getPosition(coin) {
+  /**
+   * Get total quantity of open orders on a specific side
+   * @param {string} coin 
+   * @param {string} side 'BUY' or 'SELL'
+   * @returns {Promise<number>}
+   */
+  async getOpenOrderQuantity(coin, side) {
     try {
       const symbol = this.getBinanceSymbol(coin);
-      const positions = await this.futuresPositionRisk();
-      const position = positions.find(p => p.symbol === symbol);
-      return position ? parseFloat(position.positionAmt) : 0;
+      const openOrders = await this.client.futuresOpenOrders({ symbol });
+      return openOrders
+        .filter(o => o.side === side)
+        .reduce((sum, o) => sum + parseFloat(o.origQty), 0);
     } catch (error) {
-      logger.error(`Failed to get position for ${coin}`, error);
-      return 0; // Default to 0 (no position) on error to be safe
+      logger.error(`Failed to get open order quantity for ${coin}`, error);
+      return 0;
     }
   }
 }

@@ -6,7 +6,7 @@ const parsers = require('./parsers');
 const axios = require('axios');
 const binanceClient = require('../binance/api-client');
 const orderMapper = require('../core/order-mapper');
-const consistencyEngine = require('../core/consistency-engine');
+const orderExecutor = require('../core/order-executor');
 
 class HyperliquidWS extends EventEmitter {
   constructor() {
@@ -255,9 +255,14 @@ class HyperliquidWS extends EventEmitter {
             }
             
             // C. Create New
-            logger.info(`[Sync] Emitting NEW order event for HL ${order.oid}`);
-            this.emit('order', standardizedOrder);
-            await new Promise(resolve => setTimeout(resolve, 50));
+            logger.info(`[Sync] Processing NEW order for HL ${order.oid}`);
+            try {
+              await orderExecutor.executeLimitOrder(standardizedOrder);
+            } catch (err) {
+              logger.error(`[Sync] Failed to process initial order ${order.oid}`, err);
+            }
+            // Small delay to avoid rate limits, but now it's sequential
+            await new Promise(resolve => setTimeout(resolve, 100));
           }
 
           // --- Phase 2: Prune Binance -> HL (Cancel Zombie Orders) ---
