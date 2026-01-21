@@ -330,6 +330,18 @@ class BinanceClient {
    * @param {string} coin 
    * @returns {Promise<number>} Signed position amount (Positive=Long, Negative=Short)
    */
+  async getPosition(coin) {
+    try {
+      const symbol = this.getBinanceSymbol(coin);
+      const positions = await this.futuresPositionRisk();
+      const position = positions.find(p => p.symbol === symbol);
+      return position ? parseFloat(position.positionAmt) : 0;
+    } catch (error) {
+      logger.error(`Failed to get position for ${coin}`, error);
+      return 0; // Default to 0 (no position) on error to be safe
+    }
+  }
+
   /**
    * Get total quantity of open orders on a specific side
    * @param {string} coin 
