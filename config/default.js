@@ -29,9 +29,9 @@ module.exports = {
     supportedCoins: ['BTC', 'ETH', 'SOL'],
     // Max position size limits (not implemented in MVP but placeholder)
     maxPositionSize: {
-      BTC: 0.04,
-      ETH: 10.0,
-      SOL: 100.0
+      BTC: 0.1,
+      ETH: 2.0,
+      SOL: 20.0
     },
     // Threshold for aggressive risk reduction (reduce half)
     reductionThreshold: {

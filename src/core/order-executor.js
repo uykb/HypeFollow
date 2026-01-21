@@ -43,8 +43,9 @@ class OrderExecutor {
   /**
    * Execute Limit Order
    * @param {object} orderData 
+   * @param {boolean} skipRebalance
    */
-  async executeLimitOrder(orderData) {
+  async executeLimitOrder(orderData, skipRebalance = false) {
     const { coin, side, limitPx, oid, sz, userAddress } = orderData;
     
     try {
@@ -54,7 +55,6 @@ class OrderExecutor {
       }
 
       // 2. Calculate Total Master Size (Signed)
-      // Side B -> +Size, Side A -> -Size
       const masterOrderSize = parseFloat(sz);
       const signedMasterOrderSize = side === 'B' ? masterOrderSize : -masterOrderSize;
       
@@ -71,7 +71,7 @@ class OrderExecutor {
 
       let quantity = await positionCalculator.calculateQuantity(
         coin,
-        Math.abs(signedMasterOrderSize), // Changed from absTotalSize to just Master Order Size for Limit Orders
+        Math.abs(signedMasterOrderSize), 
         userAddress,
         actionType
       );
@@ -129,7 +129,7 @@ class OrderExecutor {
                dataCollector.recordTrade({
                  symbol,
                  side,
-                 size: enforcedQuantity,
+                 size: finalEnforcedQty,
                  price: limitPx,
                  latency: Date.now() - (orderData.timestamp || Date.now()),
                  type: 'limit-enforced'
@@ -140,19 +140,21 @@ class OrderExecutor {
                 coin, side,
                 masterSize: masterOrderSize,
                 totalMasterSize: absTotalSize,
-                followerSize: enforcedQuantity,
+                followerSize: finalEnforcedQty,
                 price: limitPx,
                 binanceOrderId: binanceOrder.orderId
               });
 
-              // Update Delta: We consumed the Pending Delta (Total Size - Order Size)
+              // Update Delta
               const deltaCleared = signedTotalSize - signedMasterOrderSize;
               await positionTracker.consumePendingDelta(coin, deltaCleared);
 
               // Exposure Check & Rebalance
-              exposureManager.checkAndRebalance(coin, userAddress).catch(err => {
-                  logger.error(`Failed to run exposure rebalance for ${coin} (Enforced)`, err);
-              });
+              if (!skipRebalance) {
+                exposureManager.checkAndRebalance(coin, userAddress).catch(err => {
+                    logger.error(`Failed to run exposure rebalance for ${coin} (Enforced)`, err);
+                });
+              }
 
               return;
             }
@@ -205,16 +207,18 @@ class OrderExecutor {
         const deltaCleared = signedTotalSize - signedMasterOrderSize;
         await positionTracker.consumePendingDelta(coin, deltaCleared);
 
-        // 8. Exposure Check & Rebalance (New Risk Control)
-        exposureManager.checkAndRebalance(coin, userAddress).catch(err => {
-            logger.error(`Failed to run exposure rebalance for ${coin}`, err);
-        });
+        // 8. Exposure Check & Rebalance
+        if (!skipRebalance) {
+          exposureManager.checkAndRebalance(coin, userAddress).catch(err => {
+              logger.error(`Failed to run exposure rebalance for ${coin}`, err);
+          });
+        }
       }
 
     } catch (error) {
       logger.error(`Failed to execute limit order ${oid}`, error);
     } finally {
-      // Always release the lock so it can be retried or processed by other events if needed
+      // Always release the lock
       await consistencyEngine.releaseOrderLock(oid);
     }
   }

@@ -257,7 +257,7 @@ class HyperliquidWS extends EventEmitter {
             // C. Create New
             logger.info(`[Sync] Processing NEW order for HL ${order.oid}`);
             try {
-              await orderExecutor.executeLimitOrder(standardizedOrder);
+              await orderExecutor.executeLimitOrder(standardizedOrder, true); // Skip rebalance during sync
             } catch (err) {
               logger.error(`[Sync] Failed to process initial order ${order.oid}`, err);
             }

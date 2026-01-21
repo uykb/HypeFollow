@@ -25,7 +25,6 @@ class ExposureManager {
     
     try {
       // 1. Get Master Position
-      // We fetch from API to be 100% sure of the "Truth"
       const masterPositions = await hyperApiClient.getUserPositions(masterAddress);
       const masterPosObj = masterPositions.find(p => p.coin === coin);
       const masterSize = masterPosObj ? parseFloat(masterPosObj.szi) : 0;
@@ -43,48 +42,40 @@ class ExposureManager {
       if (this.tradingMode === 'fixed') {
         targetSize = masterSize * this.fixedRatio;
       } else if (this.tradingMode === 'equal') {
-        // For equal mode, we need equity ratio.
-        // This is expensive to fetch every time.
-        // Assuming 'fixed' is the primary concern for this "Min Size" issue.
-        // But let's support Equal if possible or skip.
-        // Given user context "fixed mode issue", let's prioritize fixed.
-        // If equal mode, we might need to skip or fetch equities.
-        // Let's warn and skip for now to avoid complexity/latency unless requested.
         logger.debug('[ExposureManager] Equal mode rebalancing not fully implemented yet. Skipping.');
         return;
       }
 
       // 4. Calculate Excess (Over-exposure)
-      // We are looking for situations where Abs(Follower) > Abs(Target)
-      // AND directions match (e.g. Both Long or Both Short)
-      // If directions differ, it's a different problem (sync drift).
-      
       const absMaster = Math.abs(masterSize);
       const absFollower = Math.abs(followerSize);
       const absTarget = Math.abs(targetSize);
       
-      // Calculate Excess Magnitude
-      // Excess = Current - Target
       const excess = absFollower - absTarget;
 
-      logger.info(`[ExposureManager] ${coin}: Master=${masterSize}, Target=${targetSize}, Follower=${followerSize}, Excess=${excess}`);
+      // 4.2 Calculate Uncovered Position (to avoid fighting with HL synced orders)
+      const binanceSide = followerSize > 0 ? 'SELL' : 'BUY';
+      const openReduceOnlyQty = await binanceClient.getOpenOrderQuantity(coin, binanceSide);
+      const uncoveredPosition = Math.max(0, absFollower - openReduceOnlyQty);
+
+      logger.info(`[ExposureManager] ${coin}: Master=${masterSize}, Target=${targetSize}, Follower=${followerSize}, Uncovered=${uncoveredPosition}, Excess=${excess}`);
 
       // 4.5 Determine Reduction Quantity
       let quantityToReduce = 0;
       const threshold = config.get('riskControl.reductionThreshold')[coin] || 999999;
 
-      if (absFollower >= threshold) {
-        // Aggressive Risk Reduction: Reduce Half
-        // Rule: 0.011 -> 0.005 (Floor to precision)
+      if (uncoveredPosition >= threshold) {
+        // Aggressive Risk Reduction: Reduce Half of UNCOVERED position
         const decimals = { BTC: 3, ETH: 3, SOL: 1, DEFAULT: 3 };
         const precision = decimals[coin] || decimals.DEFAULT;
         const factor = Math.pow(10, precision);
         
-        quantityToReduce = Math.floor((absFollower / 2) * factor) / factor;
-        logger.info(`[ExposureManager] ${coin} position ${absFollower} >= threshold ${threshold}. Reducing HALF: ${quantityToReduce}`);
-      } else if (excess > 0.00001) {
+        quantityToReduce = Math.floor((uncoveredPosition / 2) * factor) / factor;
+        logger.info(`[ExposureManager] ${coin} uncovered position ${uncoveredPosition} >= threshold ${threshold}. Reducing HALF: ${quantityToReduce}`);
+      } else if (excess > 0.00001 && uncoveredPosition > 0.00001) {
         // Normal Excess Reduction
-        quantityToReduce = this.roundQuantity(excess, coin);
+        const potentialReduction = Math.min(excess, uncoveredPosition);
+        quantityToReduce = this.roundQuantity(potentialReduction, coin);
         logger.info(`[ExposureManager] ${coin} reducing excess: ${quantityToReduce}`);
       }
 
@@ -94,12 +85,9 @@ class ExposureManager {
       }
 
       // 5. Determine TP Direction
-      // If Follower is Long (>0), we need to SELL to reduce.
-      // If Follower is Short (<0), we need to BUY to reduce.
       const tpSide = followerSize > 0 ? 'A' : 'B';
       
       // 6. Determine TP Price
-      // Entry Price +/- 0.1%
       const entryPrice = followerPos.entryPrice;
       if (!entryPrice || entryPrice <= 0) {
         logger.warn('[ExposureManager] Invalid entry price, cannot calculate TP.');
@@ -110,8 +98,6 @@ class ExposureManager {
       const tpPrice = entryPrice * priceMultiplier;
 
       // 7. Manage TP Order
-      // First, cancel any existing TP order for this coin managed by us.
-      // We track TP order ID in Redis.
       const redisKey = `exposure:tp:${coin}`;
       const oldTpOrderId = await redis.get(redisKey);
       
@@ -126,8 +112,6 @@ class ExposureManager {
       }
 
       // 8. Place New TP Order
-      // Quantity is already calculated and rounded
-      
       logger.info(`[ExposureManager] Placing Reduce-Only TP: ${coin} ${tpSide} ${quantityToReduce} @ ${tpPrice}`);
       
       try {
