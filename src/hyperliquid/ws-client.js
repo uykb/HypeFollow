@@ -7,6 +7,7 @@ const axios = require('axios');
 const binanceClient = require('../binance/api-client');
 const orderMapper = require('../core/order-mapper');
 const orderExecutor = require('../core/order-executor');
+const exposureManager = require('../core/exposure-manager');
 
 class HyperliquidWS extends EventEmitter {
   constructor() {
