@@ -32,6 +32,12 @@ module.exports = {
       BTC: 0.04,
       ETH: 10.0,
       SOL: 100.0
+    },
+    // Threshold for aggressive risk reduction (reduce half)
+    reductionThreshold: {
+      BTC: 0.01,
+      ETH: 0.2,
+      SOL: 5
     }
   },
   trading: {

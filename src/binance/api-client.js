@@ -86,28 +86,35 @@ class BinanceClient {
   /**
    * Create a limit order
    * @param {string} coin 
-   * @param {string} side 'B' or 'A'
+   * @param {string} side 'B' or 'A' (BUY or SELL)
    * @param {number|string} price 
    * @param {number|string} quantity 
+   * @param {boolean} reduceOnly
    */
-  async createLimitOrder(coin, side, price, quantity) {
+  async createLimitOrder(coin, side, price, quantity, reduceOnly = false) {
     const symbol = this.getBinanceSymbol(coin);
     const binanceSide = side === 'B' ? 'BUY' : 'SELL';
     
     // Ensure Price Precision
     const formattedPrice = this.roundPrice(coin, price);
     
-    logger.info(`Placing LIMIT order on Binance: ${symbol} ${binanceSide} ${quantity} @ ${formattedPrice} (Orig: ${price})`);
+    logger.info(`Placing LIMIT order on Binance: ${symbol} ${binanceSide} ${quantity} @ ${formattedPrice} (Orig: ${price}) ${reduceOnly ? '[REDUCE-ONLY]' : ''}`);
 
     try {
-      const order = await this.client.futuresOrder({
+      const params = {
         symbol: symbol,
         side: binanceSide,
         type: 'LIMIT',
         timeInForce: 'GTC', // Good Till Cancelled
         quantity: quantity.toString(),
         price: formattedPrice,
-      });
+      };
+
+      if (reduceOnly) {
+        params.reduceOnly = 'true';
+      }
+
+      const order = await this.client.futuresOrder(params);
       
       logger.info(`Binance LIMIT Order Placed: ${order.orderId}`);
       return order;
@@ -128,20 +135,27 @@ class BinanceClient {
    * @param {string} coin 
    * @param {string} side 'B' or 'A'
    * @param {number|string} quantity 
+   * @param {boolean} reduceOnly
    */
-  async createMarketOrder(coin, side, quantity) {
+  async createMarketOrder(coin, side, quantity, reduceOnly = false) {
     const symbol = this.getBinanceSymbol(coin);
     const binanceSide = side === 'B' ? 'BUY' : 'SELL';
 
-    logger.info(`Placing MARKET order on Binance: ${symbol} ${binanceSide} ${quantity}`);
+    logger.info(`Placing MARKET order on Binance: ${symbol} ${binanceSide} ${quantity} ${reduceOnly ? '[REDUCE-ONLY]' : ''}`);
 
     try {
-      const order = await this.client.futuresOrder({
+      const params = {
         symbol: symbol,
         side: binanceSide,
         type: 'MARKET',
         quantity: quantity.toString(),
-      });
+      };
+
+      if (reduceOnly) {
+        params.reduceOnly = 'true';
+      }
+
+      const order = await this.client.futuresOrder(params);
 
       logger.info(`Binance MARKET Order Placed: ${order.orderId}`);
       return order;

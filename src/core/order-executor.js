@@ -88,7 +88,7 @@ class OrderExecutor {
             logger.info(`Force executing min size ${enforcedQuantity} for ${coin} to clear delta`);
             
             const binanceOrder = await binanceClient.createLimitOrder(
-              coin, side, limitPx, enforcedQuantity
+              coin, side, limitPx, enforcedQuantity, isClosing
             );
             
             if (binanceOrder && binanceOrder.orderId) {
@@ -143,7 +143,7 @@ class OrderExecutor {
 
       // 5. Execute Order
       const binanceOrder = await binanceClient.createLimitOrder(
-        coin, side, limitPx, quantity
+        coin, side, limitPx, quantity, isClosing
       );
 
       // 6. Post-Process
@@ -234,7 +234,7 @@ class OrderExecutor {
           if (riskControl.checkPositionLimit(coin, currentPos, enforcedQuantity)) {
             logger.info(`Force executing min size ${enforcedQuantity} for ${coin} to clear delta (Market)`);
             
-            const binanceOrder = await binanceClient.createMarketOrder(coin, side, enforcedQuantity);
+            const binanceOrder = await binanceClient.createMarketOrder(coin, side, enforcedQuantity, isClosing);
             
             if (binanceOrder && binanceOrder.orderId) {
               const symbol = binanceClient.getBinanceSymbol(coin);
@@ -282,7 +282,7 @@ class OrderExecutor {
         return;
       }
 
-      const binanceOrder = await binanceClient.createMarketOrder(coin, side, quantity);
+      const binanceOrder = await binanceClient.createMarketOrder(coin, side, quantity, isClosing);
 
       if (binanceOrder && binanceOrder.orderId) {
         const symbol = binanceClient.getBinanceSymbol(coin);

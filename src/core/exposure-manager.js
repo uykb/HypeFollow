@@ -11,8 +11,8 @@ class ExposureManager {
     this.fixedRatio = config.get('trading.fixedRatio');
     this.equalRatio = config.get('trading.equalRatio');
     
-    // Profit target percent (e.g. 0.001 for 0.1%)
-    this.profitTarget = 0.001;
+    // Profit target percent (e.g. 0.0001 for 0.01%)
+    this.profitTarget = 0.0001;
   }
 
   /**
@@ -69,11 +69,27 @@ class ExposureManager {
 
       logger.info(`[ExposureManager] ${coin}: Master=${masterSize}, Target=${targetSize}, Follower=${followerSize}, Excess=${excess}`);
 
-      // Threshold: Excess must be positive and significant (e.g. > min size / 2)
-      // Or simply > 0. Since we deal with min sizes like 0.002, 
-      // an excess of 0.001 is significant.
-      if (excess <= 0.00001) {
-        logger.info(`[ExposureManager] No significant excess exposure for ${coin}.`);
+      // 4.5 Determine Reduction Quantity
+      let quantityToReduce = 0;
+      const threshold = config.get('riskControl.reductionThreshold')[coin] || 999999;
+
+      if (absFollower >= threshold) {
+        // Aggressive Risk Reduction: Reduce Half
+        // Rule: 0.011 -> 0.005 (Floor to precision)
+        const decimals = { BTC: 3, ETH: 3, SOL: 1, DEFAULT: 3 };
+        const precision = decimals[coin] || decimals.DEFAULT;
+        const factor = Math.pow(10, precision);
+        
+        quantityToReduce = Math.floor((absFollower / 2) * factor) / factor;
+        logger.info(`[ExposureManager] ${coin} position ${absFollower} >= threshold ${threshold}. Reducing HALF: ${quantityToReduce}`);
+      } else if (excess > 0.00001) {
+        // Normal Excess Reduction
+        quantityToReduce = this.roundQuantity(excess, coin);
+        logger.info(`[ExposureManager] ${coin} reducing excess: ${quantityToReduce}`);
+      }
+
+      if (quantityToReduce <= 0) {
+        logger.info(`[ExposureManager] No reduction needed for ${coin}.`);
         return;
       }
 
@@ -110,19 +126,12 @@ class ExposureManager {
       }
 
       // 8. Place New TP Order
-      // Quantity = Excess
-      // Round excess to precision (Binance doesn't like 0.00100000004)
-      const roundedExcess = this.roundQuantity(excess, coin);
+      // Quantity is already calculated and rounded
       
-      if (roundedExcess <= 0) {
-        logger.info('[ExposureManager] Excess rounds to 0. Skipping TP.');
-        return;
-      }
-
-      logger.info(`[ExposureManager] Placing Reduce-Only TP: ${coin} ${tpSide} ${roundedExcess} @ ${tpPrice}`);
+      logger.info(`[ExposureManager] Placing Reduce-Only TP: ${coin} ${tpSide} ${quantityToReduce} @ ${tpPrice}`);
       
       try {
-        const order = await binanceClient.createReduceOnlyOrder(coin, tpSide, tpPrice, roundedExcess);
+        const order = await binanceClient.createReduceOnlyOrder(coin, tpSide, tpPrice, quantityToReduce);
         if (order && order.orderId) {
           await redis.set(redisKey, order.orderId);
           logger.info(`[ExposureManager] TP Order placed: ${order.orderId}`);
