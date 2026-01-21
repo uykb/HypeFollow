@@ -40,6 +40,7 @@ function parseOrderUpdate(data) {
     sz: order.sz,
     oid: order.oid,
     timestamp: order.timestamp,
+    reduceOnly: order.reduceOnly || false,
     userAddress: data[0].user || null 
   };
 }

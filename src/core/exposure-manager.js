@@ -64,20 +64,22 @@ class ExposureManager {
       let quantityToReduce = 0;
       const threshold = config.get('riskControl.reductionThreshold')[coin] || 999999;
 
-      if (uncoveredPosition >= threshold) {
-        // Aggressive Risk Reduction: Reduce Half of UNCOVERED position
+      if (absFollower >= threshold) {
+        // Aggressive Risk Reduction: Reduce Half of TOTAL position
+        // We ignore uncoveredPosition here because we want this to be a priority safety net
         const decimals = { BTC: 3, ETH: 3, SOL: 1, DEFAULT: 3 };
         const precision = decimals[coin] || decimals.DEFAULT;
         const factor = Math.pow(10, precision);
         
-        quantityToReduce = Math.floor((uncoveredPosition / 2) * factor) / factor;
-        logger.info(`[ExposureManager] ${coin} uncovered position ${uncoveredPosition} >= threshold ${threshold}. Reducing HALF: ${quantityToReduce}`);
+        quantityToReduce = Math.floor((absFollower / 2) * factor) / factor;
+        logger.info(`[ExposureManager] ${coin} total position ${absFollower} >= threshold ${threshold}. Reducing HALF: ${quantityToReduce}`);
       } else if (excess > 0.00001 && uncoveredPosition > 0.00001) {
-        // Normal Excess Reduction
+        // Normal Excess Reduction (only if there's uncovered position)
         const potentialReduction = Math.min(excess, uncoveredPosition);
         quantityToReduce = this.roundQuantity(potentialReduction, coin);
         logger.info(`[ExposureManager] ${coin} reducing excess: ${quantityToReduce}`);
       }
+
 
       if (quantityToReduce <= 0) {
         logger.info(`[ExposureManager] No reduction needed for ${coin}.`);

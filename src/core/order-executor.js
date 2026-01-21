@@ -65,7 +65,7 @@ class OrderExecutor {
       // 3. Get Current Position & Calculate Follower Quantity
       const currentPos = await binanceClient.getPosition(coin);
       
-      // Determine Action Type
+      // Determine Action Type (for ratio calculation)
       const isClosing = (currentPos > 0 && side === 'A') || (currentPos < 0 && side === 'B');
       const actionType = isClosing ? 'close' : 'open';
 
@@ -76,8 +76,9 @@ class OrderExecutor {
         actionType
       );
 
-      // 3.5 Cap Quantity for Reduce-Only orders to avoid Binance -2022 error
-      if (isClosing && quantity > 0) {
+      // 3.5 Cap Quantity ONLY for Reduce-Only orders to avoid Binance -2022 error
+      // If HL order is NOT reduceOnly, we allow it to exceed position (flipping)
+      if (orderData.reduceOnly && quantity > 0) {
         const binanceSide = side === 'B' ? 'BUY' : 'SELL';
         const openQty = await binanceClient.getOpenOrderQuantity(coin, binanceSide);
         const absPos = Math.abs(currentPos);
@@ -100,9 +101,9 @@ class OrderExecutor {
         const enforcedQuantity = await this.getEnforcedQuantity(coin, quantity, actionType);
         
         if (enforcedQuantity && enforcedQuantity > 0) {
-          // Cap enforced quantity too if closing
+          // Cap enforced quantity too if HL order is reduceOnly
           let finalEnforcedQty = enforcedQuantity;
-          if (isClosing) {
+          if (orderData.reduceOnly) {
             const binanceSide = side === 'B' ? 'BUY' : 'SELL';
             const openQty = await binanceClient.getOpenOrderQuantity(coin, binanceSide);
             const absPos = Math.abs(currentPos);
@@ -113,12 +114,12 @@ class OrderExecutor {
           }
 
           if (finalEnforcedQty <= 0) {
-            logger.warn(`[OrderExecutor] Cannot enforce min size for ${coin} (closing) as position is exhausted.`);
+            logger.warn(`[OrderExecutor] Cannot enforce min size for ${coin} (reduceOnly) as position is exhausted.`);
           } else if (riskControl.checkPositionLimit(coin, currentPos, finalEnforcedQty)) {
             logger.info(`Force executing min size ${finalEnforcedQty} for ${coin} to clear delta`);
             
             const binanceOrder = await binanceClient.createLimitOrder(
-              coin, side, limitPx, finalEnforcedQty, isClosing
+              coin, side, limitPx, finalEnforcedQty, orderData.reduceOnly
             );
             
             if (binanceOrder && binanceOrder.orderId) {
@@ -175,7 +176,7 @@ class OrderExecutor {
 
       // 5. Execute Order
       const binanceOrder = await binanceClient.createLimitOrder(
-        coin, side, limitPx, quantity, isClosing
+        coin, side, limitPx, quantity, orderData.reduceOnly || false
       );
 
       // 6. Post-Process
@@ -262,15 +263,6 @@ class OrderExecutor {
         actionType
       );
 
-      // Cap Market Order if closing
-      if (isClosing && quantity > 0) {
-        const absPos = Math.abs(currentPos);
-        if (quantity > absPos) {
-          logger.info(`[OrderExecutor] Capping Market Close for ${coin} from ${quantity} to ${absPos}`);
-          quantity = absPos;
-        }
-      }
-
       if (!quantity || quantity <= 0) {
         
         // Try Enforced Execution (Scheme: Force Min Size if Lagging)
@@ -280,7 +272,7 @@ class OrderExecutor {
           if (riskControl.checkPositionLimit(coin, currentPos, enforcedQuantity)) {
             logger.info(`Force executing min size ${enforcedQuantity} for ${coin} to clear delta (Market)`);
             
-            const binanceOrder = await binanceClient.createMarketOrder(coin, side, enforcedQuantity, isClosing);
+            const binanceOrder = await binanceClient.createMarketOrder(coin, side, enforcedQuantity, false);
             
             if (binanceOrder && binanceOrder.orderId) {
               const symbol = binanceClient.getBinanceSymbol(coin);
@@ -328,7 +320,7 @@ class OrderExecutor {
         return;
       }
 
-      const binanceOrder = await binanceClient.createMarketOrder(coin, side, quantity, isClosing);
+      const binanceOrder = await binanceClient.createMarketOrder(coin, side, quantity, false);
 
       if (binanceOrder && binanceOrder.orderId) {
         const symbol = binanceClient.getBinanceSymbol(coin);

@@ -265,6 +265,16 @@ class HyperliquidWS extends EventEmitter {
             await new Promise(resolve => setTimeout(resolve, 100));
           }
 
+          // --- Phase 1.5: Trigger Rebalance after Sync ---
+          // Now that all HL orders are synced, run ExposureManager to handle any remaining risk
+          logger.info(`[Sync] Initial sync for ${user} complete. Triggering rebalance...`);
+          exposureManager.checkAndRebalance('BTC', user).catch(err => {
+            logger.error(`[Sync] Failed to run initial rebalance for BTC`, err);
+          });
+          // Add other coins if needed, or generalize
+          exposureManager.checkAndRebalance('ETH', user).catch(err => {});
+          exposureManager.checkAndRebalance('SOL', user).catch(err => {});
+
           // --- Phase 2: Prune Binance -> HL (Cancel Zombie Orders) ---
           // Iterate all Binance Open Orders. If they map to an HL Order that is NOT in hlOrderIds, Cancel them.
           
