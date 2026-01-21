@@ -174,6 +174,16 @@ class HyperliquidWS extends EventEmitter {
         if (Array.isArray(hlOpenOrders)) {
           logger.info(`Found ${hlOpenOrders.length} existing open orders for ${user}. Syncing...`);
           
+          // --- Phase 0: Pre-Sync Risk Check ---
+          // Run ExposureManager BEFORE syncing HL orders to ensure the "Reduce Half" safety net
+          // gets priority on the Binance position quota.
+          logger.info(`[Sync] Running pre-sync risk check for ${user}...`);
+          await Promise.all([
+            exposureManager.checkAndRebalance('BTC', user).catch(err => logger.error(`[Sync] Pre-sync rebalance failed for BTC`, err)),
+            exposureManager.checkAndRebalance('ETH', user).catch(err => {}),
+            exposureManager.checkAndRebalance('SOL', user).catch(err => {})
+          ]);
+
           // --- Phase 1: Sync HL -> Binance (Create / Verify) ---
           for (const order of hlOpenOrders) {
             hlOrderIds.add(order.oid.toString()); // Track for Pruning Phase
@@ -264,16 +274,6 @@ class HyperliquidWS extends EventEmitter {
             // Small delay to avoid rate limits, but now it's sequential
             await new Promise(resolve => setTimeout(resolve, 100));
           }
-
-          // --- Phase 1.5: Trigger Rebalance after Sync ---
-          // Now that all HL orders are synced, run ExposureManager to handle any remaining risk
-          logger.info(`[Sync] Initial sync for ${user} complete. Triggering rebalance...`);
-          exposureManager.checkAndRebalance('BTC', user).catch(err => {
-            logger.error(`[Sync] Failed to run initial rebalance for BTC`, err);
-          });
-          // Add other coins if needed, or generalize
-          exposureManager.checkAndRebalance('ETH', user).catch(err => {});
-          exposureManager.checkAndRebalance('SOL', user).catch(err => {});
 
           // --- Phase 2: Prune Binance -> HL (Cancel Zombie Orders) ---
           // Iterate all Binance Open Orders. If they map to an HL Order that is NOT in hlOrderIds, Cancel them.
