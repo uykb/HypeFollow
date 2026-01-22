@@ -1,48 +1,51 @@
 const logger = require('../utils/logger');
 
 /**
- * Parse Order Update Event
- * @param {object} data The 'data' payload from the WebSocket message
- * @returns {object|null} Standardized order object or null if ignored
+ * Parse Order Update Event - handles array of updates
+ * @param {array} data The 'data' payload from the WebSocket message
+ * @returns {array} Array of standardized order objects
  */
 function parseOrderUpdate(data) {
   // Example payload structure for 'orderUpdates':
-  // [ { "order": { "coin": "BTC", "side": "B", "limitPx": "30000", "sz": "1.0", "oid": 123, "status": "open", ... } } ]
+  // [ { "order": { "coin": "BTC", "side": "B", "limitPx": "30000", "sz": "1.0", "oid": 123, "status": "open", ... }, "user": "0x..." } ]
   
   if (!Array.isArray(data)) {
     logger.debug('parseOrderUpdate: data is not an array', { data });
-    return null;
+    return [];
   }
 
-  const orderEvent = data[0]; 
+  const orders = [];
   
-  if (!orderEvent || !orderEvent.order) {
-    logger.debug('parseOrderUpdate: invalid order event structure', { orderEvent });
-    return null;
+  for (const orderEvent of data) {
+    if (!orderEvent || !orderEvent.order) {
+      logger.debug('parseOrderUpdate: invalid order event structure', { orderEvent });
+      continue;
+    }
+
+    const order = orderEvent.order;
+    const status = order.status ? order.status.toLowerCase() : '';
+
+    // We are interested in 'open', 'canceled', 'filled', and 'triggered'
+    if (status !== 'open' && status !== 'canceled' && status !== 'filled' && status !== 'triggered') {
+      logger.debug(`parseOrderUpdate: ignoring status '${status}'`, { oid: order.oid });
+      continue;
+    }
+
+    orders.push({
+      type: 'order',
+      status: status, // 'open', 'canceled', 'filled', or 'triggered'
+      coin: order.coin,
+      side: order.side, // 'B' or 'A'
+      limitPx: order.limitPx,
+      sz: order.sz,
+      oid: order.oid,
+      timestamp: order.timestamp,
+      reduceOnly: order.reduceOnly || false,
+      userAddress: orderEvent.user || null 
+    });
   }
 
-  const order = orderEvent.order;
-  const status = order.status ? order.status.toLowerCase() : '';
-
-  // We are interested in 'open' (New Limit Order), 'canceled' (Cancel Order), and 'filled' (to clean up mapping)
-  // Also handle 'triggered' if necessary, but usually 'open' covers new orders.
-  if (status !== 'open' && status !== 'canceled' && status !== 'filled') {
-    logger.debug(`parseOrderUpdate: ignoring status '${status}'`, { oid: order.oid });
-    return null;
-  }
-
-  return {
-    type: 'order',
-    status: status, // 'open', 'canceled', or 'filled'
-    coin: order.coin,
-    side: order.side, // 'B' or 'A'
-    limitPx: order.limitPx,
-    sz: order.sz,
-    oid: order.oid,
-    timestamp: order.timestamp,
-    reduceOnly: order.reduceOnly || false,
-    userAddress: data[0].user || null 
-  };
+  return orders;
 }
 
 /**

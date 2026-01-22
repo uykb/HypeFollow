@@ -59,8 +59,8 @@ async function main() {
     dataCollector.stats.totalOrders++;
     
     try {
-      if (orderData.status === 'open') {
-        // Handle New Limit Order
+      if (orderData.status === 'open' || orderData.status === 'triggered') {
+        // Handle New Limit Order (or Triggered Stop/TP)
         await orderExecutor.executeLimitOrder(orderData);
       
       } else if (orderData.status === 'canceled') {

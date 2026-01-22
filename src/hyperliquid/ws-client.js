@@ -315,17 +315,20 @@ class HyperliquidWS extends EventEmitter {
 
     if (channel === 'orderUpdates') {
       logger.debug('WS: Received orderUpdates', { data }); // Detailed log
-      const order = parsers.parseOrderUpdate(data);
-      if (order) {
-        // Fallback for userAddress if missing (MVP assumption: single user)
-        if (!order.userAddress && this.followedUsers.length > 0) {
-           order.userAddress = this.followedUsers[0];
-        }
-        
-        logger.info(`WS: Parsed order event: ${order.status} ${order.coin} ${order.oid}`);
-        this.emit('order', order);
+      const orders = parsers.parseOrderUpdate(data);
+      
+      if (orders && orders.length > 0) {
+        orders.forEach(order => {
+          // Fallback for userAddress if missing (MVP assumption: single user)
+          if (!order.userAddress && this.followedUsers.length > 0) {
+            order.userAddress = this.followedUsers[0];
+          }
+          
+          logger.info(`WS: Parsed order event: ${order.status} ${order.coin} ${order.oid}`);
+          this.emit('order', order);
+        });
       } else {
-        logger.debug('WS: parseOrderUpdate returned null');
+        logger.debug('WS: parseOrderUpdate returned no valid orders');
       }
     } else if (channel === 'userFills') {
       const fills = parsers.parseUserFills(data);
