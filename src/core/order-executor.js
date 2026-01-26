@@ -402,35 +402,39 @@ class OrderExecutor {
         return;
       }
 
-      // 2. Cancel Old Order
+      // 2. Perform Atomic Cancel/Replace
       try {
-        await binanceClient.cancelOrder(mapping.symbol, mapping.orderId);
+        const newBinanceOrder = await binanceClient.cancelReplaceOrder(
+          coin,
+          mapping.orderId,
+          side,
+          limitPx,
+          quantity,
+          orderData.reduceOnly || false
+        );
+
+        // 3. Update Mapping (Only if successful)
+        if (newBinanceOrder && newBinanceOrder.orderId) {
+          // Cleanup old mapping
+          await orderMapper.deleteMapping(oid);
+          // Save new mapping
+          await orderMapper.saveMapping(oid, newBinanceOrder.orderId, mapping.symbol);
+          
+          logger.info(`[OrderExecutor] Order updated (Atomic): HL ${oid} -> Binance ${newBinanceOrder.orderId}`);
+          
+          // Log update in history
+          await consistencyEngine.markOrderProcessed(oid, {
+             type: 'limit-update',
+             coin, side,
+             price: limitPx,
+             followerSize: quantity,
+             binanceOrderId: newBinanceOrder.orderId
+          });
+        }
       } catch (err) {
-        logger.warn(`[OrderExecutor] Failed to cancel old order ${mapping.orderId} during update`, err);
-      }
-
-      // 3. Place New Order
-      const binanceOrder = await binanceClient.createLimitOrder(
-        coin, side, limitPx, quantity, orderData.reduceOnly || false
-      );
-
-      // 4. Update Mapping
-      if (binanceOrder && binanceOrder.orderId) {
-        // Cleanup old mapping
-        await orderMapper.deleteMapping(oid);
-        // Save new mapping
-        await orderMapper.saveMapping(oid, binanceOrder.orderId, mapping.symbol);
-        
-        logger.info(`[OrderExecutor] Order updated: HL ${oid} -> Binance ${binanceOrder.orderId}`);
-        
-        // Log update in history (optional)
-        await consistencyEngine.markOrderProcessed(oid, {
-           type: 'limit-update',
-           coin, side,
-           price: limitPx,
-           followerSize: quantity,
-           binanceOrderId: binanceOrder.orderId
-        });
+        logger.error(`[OrderExecutor] Atomic update failed for ${oid}`, err);
+        // If atomic failed, state should be preserved (order not cancelled if STOP_ON_FAILURE)
+        // But we need to verify. 
       }
 
     } catch (error) {

@@ -27,27 +27,34 @@ class OrderValidator {
   async cleanupStaleMappings() {
     logger.info('Running startup cleanup for stale order mappings...');
     try {
-      const keys = await redis.keys('map:h2b:*');
+      let cursor = '0';
       let cleaned = 0;
       
-      for (const key of keys) {
-        const hyperOid = key.replace('map:h2b:', '');
-        const mapping = await orderMapper.getBinanceOrder(hyperOid);
-        if (!mapping) continue;
+      do {
+        const result = await redis.scan(cursor, 'MATCH', 'map:h2b:*', 'COUNT', 100);
+        cursor = result[0];
+        const keys = result[1];
+        
+        for (const key of keys) {
+          const hyperOid = key.replace('map:h2b:', '');
+          const mapping = await orderMapper.getBinanceOrder(hyperOid);
+          if (!mapping) continue;
 
-        try {
-          await binanceClient.client.futuresGetOrder({
-            symbol: mapping.symbol,
-            orderId: mapping.orderId.toString()
-          });
-        } catch (error) {
-          // -2011: Unknown order
-          if (error.code === -2011) {
-            await orderMapper.deleteMapping(hyperOid);
-            cleaned++;
+          try {
+            await binanceClient.client.futuresGetOrder({
+              symbol: mapping.symbol,
+              orderId: mapping.orderId.toString()
+            });
+          } catch (error) {
+            // -2011: Unknown order
+            if (error.code === -2011) {
+              await orderMapper.deleteMapping(hyperOid);
+              cleaned++;
+            }
           }
         }
-      }
+      } while (cursor !== '0');
+
       if (cleaned > 0) {
         logger.info(`Startup cleanup removed ${cleaned} stale mappings`);
       }
@@ -61,18 +68,30 @@ class OrderValidator {
     this.isChecking = true;
 
     try {
-      const keys = await redis.keys('map:h2b:*');
-      if (keys.length === 0) {
-        this.isChecking = false;
-        return;
+      let cursor = '0';
+      let totalChecked = 0;
+
+      do {
+        // Use SCAN instead of KEYS to avoid blocking Redis
+        const result = await redis.scan(cursor, 'MATCH', 'map:h2b:*', 'COUNT', 100);
+        cursor = result[0];
+        const keys = result[1];
+
+        if (keys.length > 0) {
+          logger.debug(`Validating batch of ${keys.length} active order mappings...`);
+          
+          for (const key of keys) {
+            const hyperOid = key.replace('map:h2b:', '');
+            await this.validateOrder(hyperOid);
+          }
+          totalChecked += keys.length;
+        }
+      } while (cursor !== '0');
+
+      if (totalChecked === 0) {
+         // idle loop
       }
 
-      logger.debug(`Validating ${keys.length} active order mappings...`);
-
-      for (const key of keys) {
-        const hyperOid = key.replace('map:h2b:', '');
-        await this.validateOrder(hyperOid);
-      }
     } catch (error) {
       logger.error('Error in order validation loop', error);
     } finally {
@@ -129,17 +148,31 @@ class OrderValidator {
   }
 
   async getReport() {
-    const keys = await redis.keys('map:h2b:*');
     const details = [];
-    for (const key of keys) {
-      const hyperOid = key.replace('map:h2b:', '');
-      const mapping = await orderMapper.getBinanceOrder(hyperOid);
-      if (mapping) {
-        details.push({ hyperOid, ...mapping });
-      }
+    let cursor = '0';
+    let totalActive = 0;
+
+    try {
+      do {
+        const result = await redis.scan(cursor, 'MATCH', 'map:h2b:*', 'COUNT', 100);
+        cursor = result[0];
+        const keys = result[1];
+        
+        for (const key of keys) {
+          const hyperOid = key.replace('map:h2b:', '');
+          const mapping = await orderMapper.getBinanceOrder(hyperOid);
+          if (mapping) {
+            details.push({ hyperOid, ...mapping });
+          }
+        }
+        totalActive += keys.length;
+      } while (cursor !== '0');
+    } catch (err) {
+      logger.error('Error generating report', err);
     }
+
     return {
-      activeCount: keys.length,
+      activeCount: totalActive,
       orders: details
     };
   }

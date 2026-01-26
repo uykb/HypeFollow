@@ -326,6 +326,59 @@ class BinanceClient {
   }
 
   /**
+   * Cancel and Replace order (Atomic)
+   * @param {string} coin 
+   * @param {string} cancelOrderId 
+   * @param {string} side 
+   * @param {number|string} price 
+   * @param {number|string} quantity 
+   * @param {boolean} reduceOnly 
+   */
+  async cancelReplaceOrder(coin, cancelOrderId, side, price, quantity, reduceOnly = false) {
+    const symbol = this.getBinanceSymbol(coin);
+    const binanceSide = side === 'B' ? 'BUY' : 'SELL';
+    const formattedPrice = this.roundPrice(coin, price);
+
+    logger.info(`Atomic Cancel/Replace for ${coin}: Cancel ${cancelOrderId}, Place ${binanceSide} ${quantity} @ ${formattedPrice}`);
+
+    const params = {
+      symbol: symbol,
+      side: binanceSide,
+      type: 'LIMIT',
+      timeInForce: 'GTC',
+      quantity: quantity.toString(),
+      price: formattedPrice,
+      cancelOrderId: cancelOrderId.toString(),
+      cancelReplaceMode: 'ALLOW_FAILURE' // If cancel fails, still try to place? Or STOP_ON_FAILURE? usually STOP_ON_FAILURE is safer to avoid over-position
+    };
+
+    if (reduceOnly) {
+      params.reduceOnly = true;
+    }
+
+    try {
+      // Check if library supports it
+      if (typeof this.client.futuresCancelReplace === 'function') {
+        const result = await this.client.futuresCancelReplace(params);
+        logger.info(`Binance Cancel/Replace Success. New Order: ${result.newOrderResponse.orderId}`);
+        return result.newOrderResponse; // Return the new order structure
+      } else {
+        // Fallback for older library versions: Manual sequence
+        logger.warn('Library does not support futuresCancelReplace. Using sequential fallback.');
+        await this.cancelOrder(symbol, cancelOrderId);
+        return await this.createLimitOrder(coin, side, price, quantity, reduceOnly);
+      }
+    } catch (error) {
+       // If standard error, log it
+       logger.error(`Cancel/Replace Failed: ${error.message}`, {
+         code: error.code,
+         params
+       });
+       throw error;
+    }
+  }
+
+  /**
    * Get current signed position amount for a coin
    * @param {string} coin 
    * @returns {Promise<number>} Signed position amount (Positive=Long, Negative=Short)

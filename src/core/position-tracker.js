@@ -29,13 +29,16 @@ class PositionTracker {
         // So yes, PendingDelta = 0.5. 
         // Next SM Buy 0.1. Total = 0.6. Follower buys 0.6. Synced. Correct.
         
-        await redis.pipeline()
+        const pipeline = redis.pipeline()
           .hset(`targetPosition:${pos.coin}`, {
             amount: size,
             lastUpdate: Date.now()
           })
+          .expire(`targetPosition:${pos.coin}`, 2592000) // 30 days
           .set(`pendingDelta:${pos.coin}`, size) // Simple string key for signed float
-          .exec();
+          .expire(`pendingDelta:${pos.coin}`, 2592000); // 30 days
+          
+        await pipeline.exec();
           
         logger.info(`Tracked initial position for ${pos.coin}: ${size} (Pending Sync)`);
       }
@@ -55,6 +58,7 @@ class PositionTracker {
     // Redis INCRBYFLOAT is perfect for this
     // It handles the existence check (treating non-existent as 0) and float addition
     const newDelta = await redis.incrbyfloat(key, signedAmount);
+    await redis.expire(key, 2592000); // Refresh TTL (30 days)
     
     logger.info(`Updated pending delta for ${coin}: added ${signedAmount}, new total: ${newDelta}`);
     return parseFloat(newDelta);
@@ -90,6 +94,7 @@ class PositionTracker {
     
     const key = `pendingDelta:${coin}`;
     const newDelta = await redis.incrbyfloat(key, -signedAmountConsumed);
+    await redis.expire(key, 2592000); // Refresh TTL (30 days)
     
     logger.info(`Consumed pending delta for ${coin}: consumed ${signedAmountConsumed}, remaining: ${newDelta}`);
   }

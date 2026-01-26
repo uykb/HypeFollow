@@ -272,33 +272,37 @@ class HyperliquidWS extends EventEmitter {
             } catch (err) {
               logger.error(`[Sync] Failed to process initial order ${order.oid}`, err);
             }
-            // Small delay to avoid rate limits, but now it's sequential
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
+          } // End Phase 1 Loop
 
           // --- Phase 2: Prune Binance -> HL (Cancel Zombie Orders) ---
           // Iterate all Binance Open Orders. If they map to an HL Order that is NOT in hlOrderIds, Cancel them.
           
-          for (const bOrder of binanceOpenOrders) {
-            // Check if this Binance Order is a "Follow" order (has mapping)
-            const mappedHlOid = await orderMapper.getHyperliquidOrder(bOrder.orderId);
-            
-            if (mappedHlOid) {
-              // It is a Follow order.
-              // Check if the Master Order still exists
-              if (!hlOrderIds.has(mappedHlOid.toString())) {
-                logger.info(`[Sync] Pruning Zombie Binance Order ${bOrder.orderId} (HL ${mappedHlOid} no longer open).`);
+          const pruneBatchSize = 5;
+          for (let i = 0; i < binanceOpenOrders.length; i += pruneBatchSize) {
+            const batch = binanceOpenOrders.slice(i, i + pruneBatchSize);
+            await Promise.all(batch.map(async (bOrder) => {
+              try {
+                // Check if this Binance Order is a "Follow" order (has mapping)
+                const mappedHlOid = await orderMapper.getHyperliquidOrder(bOrder.orderId);
                 
-                try {
-                  await binanceClient.cancelOrder(bOrder.symbol, bOrder.orderId);
-                  await orderMapper.deleteMapping(mappedHlOid);
-                } catch (err) {
-                  logger.warn(`[Sync] Failed to prune order ${bOrder.orderId}`, err);
+                if (mappedHlOid) {
+                  // It is a Follow order.
+                  // Check if the Master Order still exists
+                  if (!hlOrderIds.has(mappedHlOid.toString())) {
+                    logger.info(`[Sync] Pruning Zombie Binance Order ${bOrder.orderId} (HL ${mappedHlOid} no longer open).`);
+                    
+                    try {
+                      await binanceClient.cancelOrder(bOrder.symbol, bOrder.orderId);
+                      await orderMapper.deleteMapping(mappedHlOid);
+                    } catch (err) {
+                      logger.warn(`[Sync] Failed to prune order ${bOrder.orderId}`, err);
+                    }
+                  }
                 }
-                
-                await new Promise(resolve => setTimeout(resolve, 50));
+              } catch (err) {
+                logger.error(`[Sync] Error processing prune for ${bOrder.orderId}`, err);
               }
-            }
+            }));
           }
 
         } else {

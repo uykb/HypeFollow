@@ -14,6 +14,16 @@ const positionTracker = require('./core/position-tracker');
 const consistencyEngine = require('./core/consistency-engine');
 const orderExecutor = require('./core/order-executor');
 
+// Global Error Handlers (Critical for stability)
+process.on('uncaughtException', (error) => {
+  logger.error('FATAL: Uncaught Exception', error);
+  // Optional: graceful shutdown logic here if needed
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('FATAL: Unhandled Promise Rejection', reason);
+});
+
 async function main() {
   logger.info('Starting HypeFollow System (Enhanced)...');
 

@@ -105,7 +105,15 @@ class ConsistencyEngine {
     const exists = await redis.exists(key);
     if (exists) return;
 
-    await redis.hset(key, {
+    // Calculate Master Equivalent Size
+    const followerSize = parseFloat(fillDetails.size);
+    const masterSize = await positionCalculator.getReversedMasterSize(
+      followerSize, 
+      this.primaryTargetAddress
+    );
+
+    const pipeline = redis.pipeline();
+    pipeline.hset(key, {
       coin: fillDetails.coin,
       side: fillDetails.side,
       size: fillDetails.size,
@@ -113,16 +121,12 @@ class ConsistencyEngine {
       binanceOrderId: fillDetails.binanceOrderId,
       occurredAt: Date.now()
     });
-
-    // Calculate Master Equivalent Size
-    const followerSize = parseFloat(fillDetails.size);
-    const masterSize = await positionCalculator.getReversedMasterSize(
-      followerSize, 
-      this.primaryTargetAddress
-    );
     
     // Save master equivalent size in orphan record for later reference (e.g. if resolved later)
-    await redis.hset(key, 'masterSize', masterSize);
+    pipeline.hset(key, 'masterSize', masterSize);
+    pipeline.expire(key, 604800); // 7 days TTL
+
+    await pipeline.exec();
 
     // Calculate Signed Size based on Master Size
     const signedChange = fillDetails.side === 'B' ? -masterSize : masterSize;
