@@ -359,6 +359,86 @@ class OrderExecutor {
       logger.error(`Failed to execute market order for ${coin}`, error);
     }
   }
+
+  /**
+   * Update (Modify) Limit Order
+   * Uses Cancel-Replace strategy
+   * @param {object} orderData 
+   */
+  async updateLimitOrder(orderData) {
+    const { coin, side, limitPx, oid, sz, userAddress } = orderData;
+    
+    // Acquire lock to prevent race conditions
+    const lockKey = `orderLock:${oid}`;
+    const acquired = await require('../utils/redis').set(lockKey, 'true', 'NX', 'EX', 10);
+    
+    if (!acquired) {
+      logger.debug(`[OrderExecutor] Order update for ${oid} locked, skipping.`);
+      return;
+    }
+
+    try {
+      const mapping = await orderMapper.getBinanceOrder(oid);
+      if (!mapping) {
+        logger.warn(`[OrderExecutor] Cannot update order ${oid}: No mapping found.`);
+        return;
+      }
+
+      logger.info(`[OrderExecutor] Updating order ${oid} (Binance ID: ${mapping.orderId})...`);
+
+      // 1. Calculate New Quantity
+      const masterOrderSize = parseFloat(sz);
+      const signedMasterOrderSize = side === 'B' ? masterOrderSize : -masterOrderSize;
+      
+      let quantity = await positionCalculator.calculateQuantity(
+        coin,
+        Math.abs(signedMasterOrderSize), 
+        userAddress,
+        'open' 
+      );
+      
+      if (!quantity || quantity <= 0) {
+        logger.warn(`[OrderExecutor] Update calculated 0 quantity for ${oid}, aborting update.`);
+        return;
+      }
+
+      // 2. Cancel Old Order
+      try {
+        await binanceClient.cancelOrder(mapping.symbol, mapping.orderId);
+      } catch (err) {
+        logger.warn(`[OrderExecutor] Failed to cancel old order ${mapping.orderId} during update`, err);
+      }
+
+      // 3. Place New Order
+      const binanceOrder = await binanceClient.createLimitOrder(
+        coin, side, limitPx, quantity, orderData.reduceOnly || false
+      );
+
+      // 4. Update Mapping
+      if (binanceOrder && binanceOrder.orderId) {
+        // Cleanup old mapping
+        await orderMapper.deleteMapping(oid);
+        // Save new mapping
+        await orderMapper.saveMapping(oid, binanceOrder.orderId, mapping.symbol);
+        
+        logger.info(`[OrderExecutor] Order updated: HL ${oid} -> Binance ${binanceOrder.orderId}`);
+        
+        // Log update in history (optional)
+        await consistencyEngine.markOrderProcessed(oid, {
+           type: 'limit-update',
+           coin, side,
+           price: limitPx,
+           followerSize: quantity,
+           binanceOrderId: binanceOrder.orderId
+        });
+      }
+
+    } catch (error) {
+      logger.error(`[OrderExecutor] Failed to update order ${oid}`, error);
+    } finally {
+      await consistencyEngine.releaseOrderLock(oid);
+    }
+  }
 }
 
 module.exports = new OrderExecutor();

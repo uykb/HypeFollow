@@ -60,8 +60,15 @@ async function main() {
     
     try {
       if (orderData.status === 'open' || orderData.status === 'triggered') {
-        // Handle New Limit Order (or Triggered Stop/TP)
-        await orderExecutor.executeLimitOrder(orderData);
+        // Check if this is an Update (Mapping exists)
+        const existingMapping = await orderMapper.getBinanceOrder(orderData.oid);
+        
+        if (existingMapping) {
+           await orderExecutor.updateLimitOrder(orderData);
+        } else {
+           // Handle New Limit Order
+           await orderExecutor.executeLimitOrder(orderData);
+        }
       
       } else if (orderData.status === 'canceled') {
         // Handle Cancel
